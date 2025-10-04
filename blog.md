@@ -162,9 +162,9 @@ Instead of reacting to file changes, just **check periodically**:
 
 ```typescript
 async function updateMetrics() {
-  let allActiveSessions = [];
+  let allMessages = [];
 
-  // Scan ALL project directories for active sessions
+  // Step 1: Collect ALL messages from ALL projects
   for (const basePath of claudeDataPaths) {
     const projectDirs = fs.readdirSync(basePath);
 
@@ -172,27 +172,26 @@ async function updateMetrics() {
       const projectPath = path.join(basePath, projectDir);
       const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
 
-      // Check EACH session file (not just the most recent)
       for (const file of files) {
         const filePath = path.join(projectPath, file);
         const messages = await parseSessionFile(filePath);
-        const metrics = calculateSessionMetrics(messages, sessionId);
 
-        // Collect all active sessions
-        if (metrics && metrics.isActive) {
-          allActiveSessions.push({ metrics, filePath });
-        }
+        // Collect ALL messages (we'll dedupe and filter later)
+        allMessages.push(...messages);
       }
     }
   }
 
-  // Pick the session with the most recent activity
-  if (allActiveSessions.length > 0) {
-    const mostRecent = allActiveSessions.sort(
-      (a, b) => b.metrics.lastMessageTime.getTime() - a.metrics.lastMessageTime.getTime()
-    )[0];
+  // Step 2: Deduplicate by message ID (messages can appear in multiple files)
+  const uniqueMessages = Array.from(
+    new Map(allMessages.map(m => [m.id, m])).values()
+  );
 
-    statusBar.update(mostRecent.metrics, planConfig);
+  // Step 3: Calculate metrics for the active session
+  const metrics = calculateSessionMetrics(uniqueMessages, 'global');
+
+  if (metrics && metrics.isActive) {
+    statusBar.update(metrics, planConfig);
   }
 }
 
@@ -213,24 +212,79 @@ const interval = setInterval(updateMetrics, 5000);
 
 ### Calculating Session Windows
 
-Claude Code uses **5-hour rolling sessions**. A session starts with the first message timestamp and expires exactly 5 hours later:
+Claude Code uses **5-hour rolling sessions**. The key insight: you need to group messages into 5-hour windows and find the active one:
 
 ```typescript
 const SESSION_DURATION_MS = 5 * 60 * 60 * 1000; // 5 hours
 
 function calculateSessionMetrics(messages: ClaudeMessage[]) {
-  const sorted = messages.sort(
-    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  // Step 1: Deduplicate messages by ID
+  const uniqueMessages = Array.from(
+    new Map(messages.map(m => [m.id, m])).values()
   );
 
-  const startTime = new Date(sorted[0].timestamp);
-  const sessionEndTime = new Date(startTime.getTime() + SESSION_DURATION_MS);
+  // Step 2: Filter to only today's messages
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const todayMessages = uniqueMessages.filter(
+    m => new Date(m.timestamp) >= today
+  );
+
+  // Step 3: Group into 5-hour windows
+  const sets = groupIntoFiveHourSets(todayMessages);
+
+  // Step 4: Find the window that contains the current time
   const now = new Date();
+  const activeSet = sets.find(
+    set => now >= set.startTime && now <= set.endTime
+  );
 
-  const isActive = now.getTime() < sessionEndTime.getTime();
-  const timeRemaining = Math.max(0, sessionEndTime.getTime() - now.getTime());
+  if (!activeSet) {
+    return null; // No active session
+  }
 
-  return { startTime, sessionEndTime, isActive, timeRemaining, ...tokens };
+  return {
+    startTime: activeSet.startTime,
+    sessionEndTime: activeSet.endTime,
+    isActive: true,
+    timeRemaining: activeSet.endTime.getTime() - now.getTime(),
+    ...calculateTokens(activeSet.messages)
+  };
+}
+
+function groupIntoFiveHourSets(messages: ClaudeMessage[]): SessionSet[] {
+  const sets = [];
+  let currentSet = null;
+
+  for (const message of messages) {
+    const msgTime = new Date(message.timestamp);
+
+    if (!currentSet) {
+      // Start first set
+      currentSet = {
+        startTime: msgTime,
+        endTime: new Date(msgTime.getTime() + SESSION_DURATION_MS),
+        messages: [message]
+      };
+    } else if (msgTime <= currentSet.endTime) {
+      // Message belongs to current set
+      currentSet.messages.push(message);
+    } else {
+      // Message is outside current set - save and start new
+      sets.push(currentSet);
+      currentSet = {
+        startTime: msgTime,
+        endTime: new Date(msgTime.getTime() + SESSION_DURATION_MS),
+        messages: [message]
+      };
+    }
+  }
+
+  if (currentSet) {
+    sets.push(currentSet);
+  }
+
+  return sets;
 }
 ```
 
@@ -256,23 +310,57 @@ function calculateBurnRate(messages: ClaudeMessage[], now: Date): number {
 }
 ```
 
-### The Gotcha: Sessions Are User-Specific, Not Project-Specific
+### Critical Gotchas
 
-**Initial mistake:** I tried to find the most recently modified file per project and return the first active session. This failed because:
+**1. Message Deduplication is Essential**
 
-1. **Claude sessions span across projects** - You might switch between workspaces mid-session
-2. **File modification time ≠ last message time** - A file might be modified but not have the latest conversation
-3. **Need to check ALL files** - The active session could be in any project directory
+Messages can appear in multiple session files! Without deduplication:
+- Same message counted multiple times
+- Token counts inflated by 30-50%
+- Misleading usage metrics
 
-**The fix:** Scan ALL session files across ALL projects, collect every active session, then pick the one with the most recent `lastMessageTime`. This ensures you're always tracking the conversation you're currently having, regardless of which VS Code workspace you're in.
+**Solution:**
+```typescript
+const uniqueMessages = Array.from(
+  new Map(messages.map(m => [m.id, m])).values()
+);
+```
+
+**2. Sessions Are Global, Not Per-Project**
+
+Claude Code limits apply across **ALL projects globally**:
+- Don't track per-workspace
+- Combine messages from all `~/.claude/projects/*` directories
+- Track single global 5-hour session
+
+**3. Only Today's Messages Matter**
+
+For accurate "current session" tracking:
+- Filter to messages from today (00:00:00 onwards)
+- Group those into 5-hour windows
+- Find the window containing the current time
+- If no window overlaps, return "No active session"
+
+**4. Cache Tokens Don't Count**
+
+Token limits only include:
+- `input_tokens`
+- `output_tokens`
+
+These do NOT count:
+- `cache_creation_input_tokens`
+- `cache_read_input_tokens`
+
+Cache tokens affect **cost** but not **rate limits**!
 
 ### Key Learnings
 
 - **Polling beats watching** for this use case - simpler and more reliable
-- **Check ALL session files** - Don't stop at the first active session, collect them all
-- **Sort by last message time** - Not file modification time
-- **Sessions are user-specific** - They aren't tied to a single project
-- **5-hour windows** are critical for accurate tracking
+- **Deduplication is mandatory** - Messages appear in multiple files
+- **Today-only filtering** - Group messages from today into 5-hour windows
+- **Sessions are global** - Not per-project, track across all workspaces
+- **Cache tokens don't count** - Only input + output count toward limits
+- **Window-based sessions** - Find the 5-hour window containing current time
 - **Burn rate** helps predict when you'll hit limits
 
 ---
