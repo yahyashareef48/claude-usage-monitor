@@ -2,7 +2,6 @@ import * as vscode from 'vscode';
 import * as path from 'path';
 import * as os from 'os';
 import * as fs from 'fs';
-import * as chokidar from 'chokidar';
 import { StatusBarManager } from './statusBar';
 import { SessionHoverPanel } from './sessionPopover';
 import { parseSessionFile, extractSessionId } from './sessionParser';
@@ -24,7 +23,6 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// State
 	let currentSession: SessionMetrics | null = null;
-	let fileWatcher: chokidar.FSWatcher | null = null;
 
 	statusBar.showInitializing();
 
@@ -39,11 +37,78 @@ export function activate(context: vscode.ExtensionContext) {
 		return;
 	}
 
-	// Start monitoring
-	startMonitoring();
+	/**
+	 * Find and process the most recent session file
+	 */
+	async function updateMetrics() {
+		try {
+			console.log('🔄 Updating metrics...');
 
-	// Do initial scan of existing files
-	scanExistingFiles();
+			for (const basePath of claudeDataPaths) {
+				const projectDirs = fs.readdirSync(basePath);
+
+				for (const projectDir of projectDirs) {
+					const projectPath = path.join(basePath, projectDir);
+
+					if (!fs.statSync(projectPath).isDirectory()) {
+						continue;
+					}
+
+					const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
+
+					if (files.length === 0) {
+						continue;
+					}
+
+					// Get most recently modified file
+					const sortedFiles = files
+						.map(f => ({
+							path: path.join(projectPath, f),
+							mtime: fs.statSync(path.join(projectPath, f)).mtime
+						}))
+						.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+
+					const mostRecent = sortedFiles[0].path;
+					console.log('📄 Processing:', mostRecent);
+
+					const messages = await parseSessionFile(mostRecent);
+					console.log(`   └─ ${messages.length} messages`);
+
+					if (messages.length === 0) {
+						continue;
+					}
+
+					const sessionId = extractSessionId(mostRecent);
+					const metrics = calculateSessionMetrics(messages, sessionId);
+
+					if (metrics && metrics.isActive) {
+						console.log(`   └─ ✅ Active session: ${metrics.totalTokens} tokens`);
+						currentSession = metrics;
+						statusBar.update(currentSession, planConfig);
+						return; // Found active session
+					}
+				}
+			}
+
+			// No active session found
+			console.log('   └─ ⚠️ No active session');
+			currentSession = null;
+			statusBar.update(null, planConfig);
+
+		} catch (error) {
+			console.error('❌ Error updating metrics:', error);
+		}
+	}
+
+	// Update immediately
+	updateMetrics();
+
+	// Update every 5 seconds
+	const interval = setInterval(updateMetrics, 5000);
+
+	context.subscriptions.push({
+		dispose: () => clearInterval(interval)
+	});
 
 	// Register command to show popover
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
@@ -51,134 +116,6 @@ export function activate(context: vscode.ExtensionContext) {
 	});
 
 	context.subscriptions.push(statusBar, hoverPanel, showPopup);
-
-	/**
-	 * Scan existing files immediately on startup
-	 */
-	async function scanExistingFiles() {
-		console.log('🔍 Starting initial scan...');
-
-		for (const basePath of claudeDataPaths) {
-			try {
-				const projectDirs = fs.readdirSync(basePath);
-				console.log(`📂 Found ${projectDirs.length} project directories in ${basePath}`);
-
-				for (const projectDir of projectDirs) {
-					const projectPath = path.join(basePath, projectDir);
-					const stat = fs.statSync(projectPath);
-
-					if (!stat.isDirectory()) {
-						continue;
-					}
-
-					const files = fs.readdirSync(projectPath);
-					const jsonlFiles = files.filter(f => f.endsWith('.jsonl'));
-					console.log(`📄 Found ${jsonlFiles.length} JSONL files in ${projectDir}`);
-
-					// Process the most recent file (likely the active session)
-					if (jsonlFiles.length > 0) {
-						const sortedFiles = jsonlFiles
-							.map(f => ({
-								name: f,
-								path: path.join(projectPath, f),
-								mtime: fs.statSync(path.join(projectPath, f)).mtime
-							}))
-							.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
-
-						const mostRecent = sortedFiles[0];
-						console.log(`⏰ Most recent file: ${mostRecent.name} (${mostRecent.mtime})`);
-
-						await handleFileChange(mostRecent.path);
-					}
-				}
-			} catch (error) {
-				console.error(`Error scanning ${basePath}:`, error);
-			}
-		}
-
-		console.log('✅ Initial scan complete');
-	}
-
-	/**
-	 * Start monitoring Claude session files
-	 */
-	function startMonitoring() {
-		// Claude files are named with UUIDs: {uuid}.jsonl
-		const patterns = claudeDataPaths.map(p => path.join(p, '**', '*.jsonl'));
-
-		console.log('👀 Watching patterns:', patterns);
-
-		fileWatcher = chokidar.watch(patterns, {
-			persistent: true,
-			ignoreInitial: true, // We handle initial scan manually
-			awaitWriteFinish: {
-				stabilityThreshold: 500,
-				pollInterval: 100
-			}
-		});
-
-		fileWatcher.on('add', (filePath) => {
-			console.log('➕ File added:', filePath);
-			handleFileChange(filePath);
-		});
-
-		fileWatcher.on('change', (filePath) => {
-			console.log('✏️ File changed:', filePath);
-			handleFileChange(filePath);
-		});
-
-		fileWatcher.on('error', error => {
-			console.error('❌ File watcher error:', error);
-			statusBar.showError('File watcher error');
-		});
-
-		console.log('✅ File watcher started');
-	}
-
-	/**
-	 * Handle file changes
-	 */
-	async function handleFileChange(filePath: string) {
-		try {
-			console.log('📁 Processing:', filePath);
-
-			const messages = await parseSessionFile(filePath);
-			console.log(`   └─ ${messages.length} messages parsed`);
-
-			if (messages.length === 0) {
-				console.log('   └─ ⚠️ No messages found, skipping');
-				return;
-			}
-
-			const sessionId = extractSessionId(filePath);
-			const metrics = calculateSessionMetrics(messages, sessionId);
-
-			if (metrics) {
-				console.log(`   └─ Tokens: ${metrics.totalTokens}, Active: ${metrics.isActive}`);
-
-				if (metrics.isActive) {
-					currentSession = metrics;
-					statusBar.update(currentSession, planConfig);
-					console.log('   └─ ✅ Status bar updated!');
-				} else {
-					console.log('   └─ ⏰ Session expired');
-				}
-			} else {
-				console.log('   └─ ❌ No metrics calculated');
-			}
-		} catch (error) {
-			console.error('❌ Error processing file:', error);
-		}
-	}
-
-	/**
-	 * Clean up on deactivation
-	 */
-	context.subscriptions.push({
-		dispose: () => {
-			fileWatcher?.close();
-		}
-	});
 }
 
 /**
