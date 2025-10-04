@@ -162,32 +162,37 @@ Instead of reacting to file changes, just **check periodically**:
 
 ```typescript
 async function updateMetrics() {
-  // Scan all Claude project directories
+  let allActiveSessions = [];
+
+  // Scan ALL project directories for active sessions
   for (const basePath of claudeDataPaths) {
     const projectDirs = fs.readdirSync(basePath);
 
     for (const projectDir of projectDirs) {
-      const files = fs.readdirSync(projectPath)
-        .filter(f => f.endsWith('.jsonl'));
+      const projectPath = path.join(basePath, projectDir);
+      const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
 
-      // Get most recently modified file
-      const sortedFiles = files
-        .map(f => ({
-          path: path.join(projectPath, f),
-          mtime: fs.statSync(path.join(projectPath, f)).mtime
-        }))
-        .sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+      // Check EACH session file (not just the most recent)
+      for (const file of files) {
+        const filePath = path.join(projectPath, file);
+        const messages = await parseSessionFile(filePath);
+        const metrics = calculateSessionMetrics(messages, sessionId);
 
-      // Process the latest session
-      const mostRecent = sortedFiles[0].path;
-      const messages = await parseSessionFile(mostRecent);
-      const metrics = calculateSessionMetrics(messages, sessionId);
-
-      if (metrics && metrics.isActive) {
-        statusBar.update(metrics, planConfig);
-        return; // Found active session
+        // Collect all active sessions
+        if (metrics && metrics.isActive) {
+          allActiveSessions.push({ metrics, filePath });
+        }
       }
     }
+  }
+
+  // Pick the session with the most recent activity
+  if (allActiveSessions.length > 0) {
+    const mostRecent = allActiveSessions.sort(
+      (a, b) => b.metrics.lastMessageTime.getTime() - a.metrics.lastMessageTime.getTime()
+    )[0];
+
+    statusBar.update(mostRecent.metrics, planConfig);
   }
 }
 
@@ -204,6 +209,7 @@ const interval = setInterval(updateMetrics, 5000);
 - **Simplicity** - No file watcher setup/teardown
 - **Debuggability** - Easy to log exactly what's happening
 - **Performance** - 5-second intervals are fine for this use case
+- **User-specific tracking** - Sessions aren't project-specific, they're user-specific, so we check ALL files and pick the most recently active one
 
 ### Calculating Session Windows
 
@@ -250,10 +256,22 @@ function calculateBurnRate(messages: ClaudeMessage[], now: Date): number {
 }
 ```
 
+### The Gotcha: Sessions Are User-Specific, Not Project-Specific
+
+**Initial mistake:** I tried to find the most recently modified file per project and return the first active session. This failed because:
+
+1. **Claude sessions span across projects** - You might switch between workspaces mid-session
+2. **File modification time ≠ last message time** - A file might be modified but not have the latest conversation
+3. **Need to check ALL files** - The active session could be in any project directory
+
+**The fix:** Scan ALL session files across ALL projects, collect every active session, then pick the one with the most recent `lastMessageTime`. This ensures you're always tracking the conversation you're currently having, regardless of which VS Code workspace you're in.
+
 ### Key Learnings
 
 - **Polling beats watching** for this use case - simpler and more reliable
-- **Most recent file** is usually the active session
+- **Check ALL session files** - Don't stop at the first active session, collect them all
+- **Sort by last message time** - Not file modification time
+- **Sessions are user-specific** - They aren't tied to a single project
 - **5-hour windows** are critical for accurate tracking
 - **Burn rate** helps predict when you'll hit limits
 

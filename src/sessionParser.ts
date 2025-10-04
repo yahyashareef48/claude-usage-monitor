@@ -53,12 +53,6 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeMessage[
     console.error(`Failed to read session file ${filePath}:`, err);
   }
 
-  if (messages.length > 0) {
-    console.log(`📋 Parsed ${messages.length} messages`);
-    console.log(`   First: ${messages[0].timestamp} (${messages[0].role})`);
-    console.log(`   Last: ${messages[messages.length - 1].timestamp} (${messages[messages.length - 1].role})`);
-  }
-
   return messages;
 }
 
