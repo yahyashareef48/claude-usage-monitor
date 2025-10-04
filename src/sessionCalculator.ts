@@ -31,12 +31,19 @@ export function calculateSessionMetrics(
 		return msgTime >= startOfToday;
 	});
 
+	console.log(`📅 Total messages: ${sortedMessages.length}, Today's messages: ${todayMessages.length}`);
+
 	if (todayMessages.length === 0) {
 		return null; // No messages from today
 	}
 
 	// Step 3: Group into 5-hour sets starting from the very first message of today
 	const sets = groupIntoFiveHourSets(todayMessages);
+
+	console.log(`📦 Created ${sets.length} session sets`);
+	sets.forEach((set, i) => {
+		console.log(`   Set ${i + 1}: ${set.startTime.toLocaleTimeString()} - ${set.endTime.toLocaleTimeString()} (${set.messages.length} messages)`);
+	});
 
 	if (sets.length === 0) {
 		return null;
@@ -48,12 +55,17 @@ export function calculateSessionMetrics(
 		return now >= set.startTime && now <= set.endTime;
 	});
 
+	console.log(`⏰ Current time: ${now.toLocaleTimeString()}`);
+	console.log(`✅ Active sets found: ${activeSets.length}`);
+
 	// Get the last (most recent) overlapping set
 	const activeSet = activeSets.length > 0 ? activeSets[activeSets.length - 1] : null;
 
 	if (!activeSet) {
 		return null; // No active session - all sets have expired
 	}
+
+	console.log(`🎯 Active set: ${activeSet.startTime.toLocaleTimeString()} - ${activeSet.endTime.toLocaleTimeString()} with ${activeSet.messages.length} messages`);
 
 	// Calculate metrics for the active set
 	const startTime = activeSet.startTime;
@@ -68,20 +80,40 @@ export function calculateSessionMetrics(
 	let cacheCreationTokens = 0;
 	let cacheReadTokens = 0;
 	let outputTokens = 0;
+	let messagesWithUsage = 0;
+
+	console.log(`🔍 Analyzing ${activeSet.messages.length} messages in active set...`);
 
 	for (const message of activeSet.messages) {
 		if (message.usage) {
-			totalTokens += calculateTokensFromUsage(message.usage);
+			messagesWithUsage++;
+			const msgTokens = calculateTokensFromUsage(message.usage);
+			totalTokens += msgTokens;
 			inputTokens += message.usage.input_tokens;
 			cacheCreationTokens += message.usage.cache_creation_input_tokens || 0;
 			cacheReadTokens += message.usage.cache_read_input_tokens || 0;
 			outputTokens += message.usage.output_tokens;
+
+			// Log first 3 and last 3 messages with their token counts
+			if (messagesWithUsage <= 3 || messagesWithUsage > activeSet.messages.filter(m => m.usage).length - 3) {
+				console.log(`   Msg ${messagesWithUsage}: ${new Date(message.timestamp).toLocaleTimeString()} - ${msgTokens} tokens (in: ${message.usage.input_tokens}, out: ${message.usage.output_tokens})`);
+			} else if (messagesWithUsage === 4) {
+				console.log(`   ... (${activeSet.messages.filter(m => m.usage).length - 6} more messages) ...`);
+			}
 		}
 	}
+
+	console.log(`📝 Messages with usage data: ${messagesWithUsage} out of ${activeSet.messages.length}`);
 
 	// Calculate burn rate (tokens per minute over last 10 minutes)
 	const burnRate = calculateBurnRate(activeSet.messages, now);
 
+	console.log(`💰 Token breakdown:`);
+	console.log(`   Input: ${inputTokens}`);
+	console.log(`   Cache creation: ${cacheCreationTokens} (not counted toward limit)`);
+	console.log(`   Cache read: ${cacheReadTokens} (not counted toward limit)`);
+	console.log(`   Output: ${outputTokens}`);
+	console.log(`   TOTAL (toward limit): ${totalTokens}`);
 	return {
 		totalTokens,
 		inputTokens,

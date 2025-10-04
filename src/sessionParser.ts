@@ -58,9 +58,15 @@ export async function parseSessionFile(filePath: string): Promise<ClaudeMessage[
 
 /**
  * Calculate total tokens from message usage
+ * NOTE: Cache tokens (cache_creation_input_tokens and cache_read_input_tokens)
+ * do NOT count toward session limits - only base input_tokens and output_tokens count!
  */
 export function calculateTokensFromUsage(usage: MessageUsage): number {
-  return usage.input_tokens + (usage.cache_creation_input_tokens || 0) + (usage.cache_read_input_tokens || 0) + (usage.output_tokens || 0);
+  const inputTokens = usage.input_tokens || 0;
+  const outputTokens = usage.output_tokens || 0;
+
+  // Only count input and output - cache tokens don't count toward limits
+  return inputTokens + outputTokens;
 }
 
 /**
