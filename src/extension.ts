@@ -1,26 +1,26 @@
-// The module 'vscode' contains the VS Code extensibility API
-// Import the module and reference it with the alias vscode in your code below
 import * as vscode from 'vscode';
 
-// This method is called when your extension is activated
-// Your extension is activated the very first time the command is executed
 export function activate(context: vscode.ExtensionContext) {
+	console.log('Claude Usage Monitor is now active!');
 
-	// Use the console to output diagnostic information (console.log) and errors (console.error)
-	// This line of code will only be executed once when your extension is activated
-	console.log('Congratulations, your extension "claude-usage-monitor" is now active!');
+	// Create status bar item with Claude icon on the right side
+	const statusBarItem = vscode.window.createStatusBarItem(
+		vscode.StatusBarAlignment.Right,
+		100
+	);
 
-	// The command has been defined in the package.json file
-	// Now provide the implementation of the command with registerCommand
-	// The commandId parameter must match the command field in package.json
-	const disposable = vscode.commands.registerCommand('claude-usage-monitor.helloWorld', () => {
-		// The code you place here will be executed every time your command is executed
-		// Display a message box to the user
-		vscode.window.showInformationMessage('Hello World from Claude Usage Monitor!');
+	// Set the custom Claude icon
+	statusBarItem.text = '$(claude-icon)';
+	statusBarItem.tooltip = 'Claude Usage Monitor';
+	statusBarItem.command = 'claude-usage-monitor.showPopup';
+	statusBarItem.show();
+
+	// Register command to show popup
+	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
+		vscode.window.showInformationMessage('Hello World');
 	});
 
-	context.subscriptions.push(disposable);
+	context.subscriptions.push(statusBarItem, showPopup);
 }
 
-// This method is called when your extension is deactivated
 export function deactivate() {}
