@@ -3,133 +3,237 @@ import { SessionMetrics, PlanConfig } from './types';
 import { formatTimeRemaining, formatDateTime, getStatusColor, estimateTimeToLimit } from './sessionCalculator';
 
 /**
- * Show a quick pick popover with session details (similar to Copilot's UI)
+ * Manages a compact hover panel (Copilot-style)
  */
-export function showSessionPopover(session: SessionMetrics | null, planConfig: PlanConfig) {
-	if (!session) {
-		vscode.window.showQuickPick(['No active session. Start a conversation with Claude Code to begin tracking.'], {
-			title: '$(claude-icon) Claude Session Monitor',
-			placeHolder: 'No active session'
-		});
-		return;
-	}
+export class SessionHoverPanel {
+	private panel: vscode.WebviewPanel | undefined;
 
-	const usagePercent = (session.totalTokens / planConfig.tokenLimit) * 100;
-	const timeToLimit = estimateTimeToLimit(session.totalTokens, planConfig.tokenLimit, session.burnRate);
+	constructor(private extensionUri: vscode.Uri) {}
 
-	const items: vscode.QuickPickItem[] = [
-		{
-			label: '$(clock) Session Timing',
-			kind: vscode.QuickPickItemKind.Separator
-		},
-		{
-			label: `Started: ${formatDateTime(session.startTime)}`,
-			description: ''
-		},
-		{
-			label: `Ends: ${formatDateTime(session.sessionEndTime)}`,
-			description: session.isActive ? `in ${formatTimeRemaining(session.timeRemaining)}` : '(Expired)'
-		},
-		{
-			label: `Time Remaining: ${session.isActive ? formatTimeRemaining(session.timeRemaining) : 'Expired'}`,
-			description: session.isActive ? '✓ Active' : '⚠️ Expired'
-		},
-		{
-			label: '',
-			kind: vscode.QuickPickItemKind.Separator
-		},
-		{
-			label: '$(graph) Token Usage',
-			kind: vscode.QuickPickItemKind.Separator
-		},
-		{
-			label: `Total: ${session.totalTokens.toLocaleString()} / ${planConfig.tokenLimit.toLocaleString()}`,
-			description: `${usagePercent.toFixed(1)}%`,
-			detail: getUsageBar(usagePercent)
-		},
-		{
-			label: `Input Tokens: ${session.inputTokens.toLocaleString()}`,
-			description: ''
-		},
-		{
-			label: `Output Tokens: ${session.outputTokens.toLocaleString()}`,
-			description: ''
-		},
-		{
-			label: `Cache Creation: ${session.cacheCreationTokens.toLocaleString()}`,
-			description: ''
-		},
-		{
-			label: `Cache Reads: ${session.cacheReadTokens.toLocaleString()}`,
-			description: ''
-		},
-		{
-			label: `Messages: ${session.messages}`,
-			description: ''
-		},
-		{
-			label: '',
-			kind: vscode.QuickPickItemKind.Separator
-		},
-		{
-			label: '$(flame) Performance',
-			kind: vscode.QuickPickItemKind.Separator
-		},
-		{
-			label: `Burn Rate: ${Math.round(session.burnRate)} tokens/min`,
-			description: ''
+	public show(session: SessionMetrics | null, planConfig: PlanConfig) {
+		if (this.panel) {
+			this.panel.webview.html = this.getHtmlContent(session, planConfig);
+			this.panel.reveal(vscode.ViewColumn.One, true);
+			return;
 		}
-	];
 
-	// Add time to limit if applicable
-	if (timeToLimit && session.isActive) {
-		items.push({
-			label: `Est. Time to Limit: ${formatTimeRemaining(timeToLimit)}`,
-			description: '⏱️'
+		this.panel = vscode.window.createWebviewPanel(
+			'claudeSessionHover',
+			'Claude Session',
+			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
+			{
+				enableScripts: false,
+				retainContextWhenHidden: false
+			}
+		);
+
+		this.panel.webview.html = this.getHtmlContent(session, planConfig);
+
+		this.panel.onDidDispose(() => {
+			this.panel = undefined;
 		});
 	}
 
-	// Add warning if high usage
-	if (usagePercent >= 80) {
-		items.push({
-			label: '',
-			kind: vscode.QuickPickItemKind.Separator
-		});
-		items.push({
-			label: usagePercent >= 100 ? '$(error) Limit Reached!' : '$(warning) High Usage Warning',
-			description: `${usagePercent.toFixed(1)}%`,
-			detail: `You've used ${usagePercent.toFixed(1)}% of your ${planConfig.plan.toUpperCase()} plan limit.`
-		});
+	public dispose() {
+		this.panel?.dispose();
 	}
 
-	const quickPick = vscode.window.createQuickPick();
-	quickPick.title = `$(claude-icon) Claude Session Monitor`;
-	quickPick.placeholder = `Session ${session.isActive ? 'active' : 'expired'} • ${session.totalTokens.toLocaleString()} tokens used`;
-	quickPick.items = items;
-	quickPick.canSelectMany = false;
+	private getHtmlContent(session: SessionMetrics | null, planConfig: PlanConfig): string {
+		if (!session) {
+			return this.getNoSessionHtml();
+		}
 
-	// Close when user clicks away or presses Escape
-	quickPick.onDidHide(() => quickPick.dispose());
+		const usagePercent = (session.totalTokens / planConfig.tokenLimit) * 100;
+		const statusColor = getStatusColor(usagePercent);
+		const timeToLimit = estimateTimeToLimit(session.totalTokens, planConfig.tokenLimit, session.burnRate);
 
-	quickPick.show();
+		return `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<style>
+		* { margin: 0; padding: 0; box-sizing: border-box; }
+		body {
+			font-family: var(--vscode-font-family);
+			font-size: 13px;
+			color: var(--vscode-foreground);
+			background: var(--vscode-editor-background);
+			padding: 16px;
+			max-width: 400px;
+		}
+		.header {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			margin-bottom: 16px;
+			padding-bottom: 12px;
+			border-bottom: 1px solid var(--vscode-panel-border);
+		}
+		.badge {
+			padding: 2px 8px;
+			border-radius: 10px;
+			font-size: 11px;
+			font-weight: 600;
+			background: ${statusColor}20;
+			color: ${statusColor};
+			border: 1px solid ${statusColor};
+		}
+		.section {
+			margin-bottom: 16px;
+		}
+		.section-title {
+			font-size: 11px;
+			font-weight: 600;
+			color: var(--vscode-descriptionForeground);
+			text-transform: uppercase;
+			margin-bottom: 8px;
+		}
+		.row {
+			display: flex;
+			justify-content: space-between;
+			padding: 6px 0;
+			font-size: 12px;
+		}
+		.label {
+			color: var(--vscode-descriptionForeground);
+		}
+		.value {
+			font-weight: 500;
+		}
+		.progress {
+			width: 100%;
+			height: 6px;
+			background: var(--vscode-editor-background);
+			border-radius: 3px;
+			overflow: hidden;
+			margin: 8px 0;
+		}
+		.progress-fill {
+			height: 100%;
+			background: ${statusColor};
+			width: ${Math.min(usagePercent, 100)}%;
+		}
+		.warning {
+			padding: 8px 12px;
+			background: #ffd93d20;
+			border-left: 3px solid #ffd93d;
+			border-radius: 4px;
+			font-size: 12px;
+			margin-top: 12px;
+		}
+		.error {
+			padding: 8px 12px;
+			background: #ff6b6b20;
+			border-left: 3px solid #ff6b6b;
+			border-radius: 4px;
+			font-size: 12px;
+			margin-top: 12px;
+		}
+	</style>
+</head>
+<body>
+	<div class="header">
+		<strong>Claude Session</strong>
+		<span class="badge">${session.isActive ? 'Active' : 'Expired'}</span>
+	</div>
+
+	<div class="section">
+		<div class="section-title">Session Timing</div>
+		<div class="row">
+			<span class="label">Started</span>
+			<span class="value">${formatDateTime(session.startTime)}</span>
+		</div>
+		<div class="row">
+			<span class="label">Ends</span>
+			<span class="value">${formatDateTime(session.sessionEndTime)}</span>
+		</div>
+		<div class="row">
+			<span class="label">Time Left</span>
+			<span class="value">${session.isActive ? formatTimeRemaining(session.timeRemaining) : 'Expired'}</span>
+		</div>
+	</div>
+
+	<div class="section">
+		<div class="section-title">Token Usage</div>
+		<div class="row">
+			<span class="label">Total</span>
+			<span class="value">${session.totalTokens.toLocaleString()} / ${planConfig.tokenLimit.toLocaleString()}</span>
+		</div>
+		<div class="progress">
+			<div class="progress-fill"></div>
+		</div>
+		<div class="row" style="margin-top: 4px;">
+			<span class="label">Usage</span>
+			<span class="value">${usagePercent.toFixed(1)}%</span>
+		</div>
+	</div>
+
+	<div class="section">
+		<div class="section-title">Details</div>
+		<div class="row">
+			<span class="label">Input</span>
+			<span class="value">${session.inputTokens.toLocaleString()}</span>
+		</div>
+		<div class="row">
+			<span class="label">Output</span>
+			<span class="value">${session.outputTokens.toLocaleString()}</span>
+		</div>
+		<div class="row">
+			<span class="label">Cache Creation</span>
+			<span class="value">${session.cacheCreationTokens.toLocaleString()}</span>
+		</div>
+		<div class="row">
+			<span class="label">Cache Reads</span>
+			<span class="value">${session.cacheReadTokens.toLocaleString()}</span>
+		</div>
+		<div class="row">
+			<span class="label">Burn Rate</span>
+			<span class="value">${Math.round(session.burnRate)} tokens/min</span>
+		</div>
+		${timeToLimit ? `
+		<div class="row">
+			<span class="label">Est. Time to Limit</span>
+			<span class="value">${formatTimeRemaining(timeToLimit)}</span>
+		</div>
+		` : ''}
+	</div>
+
+	${usagePercent >= 80 ? `
+	<div class="${usagePercent >= 100 ? 'error' : 'warning'}">
+		<strong>${usagePercent >= 100 ? '⚠️ Limit Reached' : '⚠️ High Usage'}</strong><br>
+		${usagePercent.toFixed(1)}% of ${planConfig.plan.toUpperCase()} plan used
+	</div>
+	` : ''}
+</body>
+</html>`;
+	}
+
+	private getNoSessionHtml(): string {
+		return `<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="UTF-8">
+	<style>
+		body {
+			font-family: var(--vscode-font-family);
+			color: var(--vscode-descriptionForeground);
+			background: var(--vscode-editor-background);
+			padding: 40px 20px;
+			text-align: center;
+		}
+		h3 { margin-bottom: 8px; }
+	</style>
+</head>
+<body>
+	<h3>No Active Session</h3>
+	<p>Start a conversation with Claude Code to begin tracking.</p>
+</body>
+</html>`;
+	}
 }
 
-/**
- * Generate a simple text-based progress bar
- */
-function getUsageBar(percent: number): string {
-	const barLength = 30;
-	const filled = Math.round((percent / 100) * barLength);
-	const empty = barLength - filled;
-
-	const bar = '█'.repeat(filled) + '░'.repeat(empty);
-
-	let color = '🟢';
-	if (percent >= 80) {
-		color = '🔴';
-	} else if (percent >= 60) {
-		color = '🟡';
-	}
-
-	return `${color} ${bar}`;
+// Legacy function for compatibility
+export function showSessionPopover(session: SessionMetrics | null, planConfig: PlanConfig) {
+	// This will be replaced by the panel in extension.ts
 }

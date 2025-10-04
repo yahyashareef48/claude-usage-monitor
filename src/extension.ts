@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import * as chokidar from 'chokidar';
 import { StatusBarManager } from './statusBar';
-import { showSessionPopover } from './sessionPopover';
+import { SessionHoverPanel } from './sessionPopover';
 import { parseSessionFile, extractSessionId } from './sessionParser';
 import { calculateSessionMetrics } from './sessionCalculator';
 import { SessionMetrics, PlanConfig } from './types';
@@ -14,6 +14,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Initialize components
 	const statusBar = new StatusBarManager();
+	const hoverPanel = new SessionHoverPanel(context.extensionUri);
 
 	// Configuration
 	const planConfig: PlanConfig = {
@@ -43,10 +44,10 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register command to show popover
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
-		showSessionPopover(currentSession, planConfig);
+		hoverPanel.show(currentSession, planConfig);
 	});
 
-	context.subscriptions.push(statusBar, showPopup);
+	context.subscriptions.push(statusBar, hoverPanel, showPopup);
 
 	/**
 	 * Start monitoring Claude session files
