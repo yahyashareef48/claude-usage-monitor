@@ -17,12 +17,19 @@ export function calculateSessionMetrics(
 
 	const now = new Date();
 
-	// Step 1: Sort all messages by timestamp
-	const sortedMessages = [...messages].sort(
+	// Step 1: Remove duplicate messages by ID (in case same message appears in multiple files)
+	const uniqueMessages = Array.from(
+		new Map(messages.map(m => [m.id, m])).values()
+	);
+
+	console.log(`🔄 Total messages: ${messages.length}, Unique messages: ${uniqueMessages.length}`);
+
+	// Step 2: Sort all messages by timestamp
+	const sortedMessages = [...uniqueMessages].sort(
 		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
 	);
 
-	// Step 2: Filter to only today's messages
+	// Step 3: Filter to only today's messages
 	const startOfToday = new Date(now);
 	startOfToday.setHours(0, 0, 0, 0);
 
@@ -31,7 +38,7 @@ export function calculateSessionMetrics(
 		return msgTime >= startOfToday;
 	});
 
-	console.log(`📅 Total messages: ${sortedMessages.length}, Today's messages: ${todayMessages.length}`);
+	console.log(`📅 Sorted messages: ${sortedMessages.length}, Today's messages: ${todayMessages.length}`);
 
 	if (todayMessages.length === 0) {
 		return null; // No messages from today
@@ -84,8 +91,20 @@ export function calculateSessionMetrics(
 
 	console.log(`🔍 Analyzing ${activeSet.messages.length} messages in active set...`);
 
+	// Track message IDs to detect any remaining duplicates
+	const seenIds = new Set();
+	let duplicateCount = 0;
+
 	for (const message of activeSet.messages) {
 		if (message.usage) {
+			// Check for duplicate IDs even after deduplication
+			if (seenIds.has(message.id)) {
+				duplicateCount++;
+				console.log(`   ⚠️ Duplicate ID found: ${message.id} - SKIPPING`);
+				continue;
+			}
+			seenIds.add(message.id);
+
 			messagesWithUsage++;
 			const msgTokens = calculateTokensFromUsage(message.usage);
 			totalTokens += msgTokens;
@@ -94,13 +113,18 @@ export function calculateSessionMetrics(
 			cacheReadTokens += message.usage.cache_read_input_tokens || 0;
 			outputTokens += message.usage.output_tokens;
 
-			// Log first 3 and last 3 messages with their token counts
-			if (messagesWithUsage <= 3 || messagesWithUsage > activeSet.messages.filter(m => m.usage).length - 3) {
-				console.log(`   Msg ${messagesWithUsage}: ${new Date(message.timestamp).toLocaleTimeString()} - ${msgTokens} tokens (in: ${message.usage.input_tokens}, out: ${message.usage.output_tokens})`);
-			} else if (messagesWithUsage === 4) {
-				console.log(`   ... (${activeSet.messages.filter(m => m.usage).length - 6} more messages) ...`);
+			// Log ALL messages to debug output token issue
+			console.log(`   Msg ${messagesWithUsage}: ${new Date(message.timestamp).toLocaleTimeString()} - ${msgTokens} tokens (in: ${message.usage.input_tokens}, out: ${message.usage.output_tokens})`);
+
+			// Track large output messages
+			if (message.usage.output_tokens > 1000) {
+				console.log(`      ⚠️ Large output: ${message.usage.output_tokens} tokens`);
 			}
 		}
+	}
+
+	if (duplicateCount > 0) {
+		console.log(`⚠️ Found and skipped ${duplicateCount} duplicate messages in active set`);
 	}
 
 	console.log(`📝 Messages with usage data: ${messagesWithUsage} out of ${activeSet.messages.length}`);
