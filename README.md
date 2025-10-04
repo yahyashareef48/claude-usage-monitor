@@ -1,71 +1,225 @@
-# claude-usage-monitor README
+# Claude Code Usage Monitor
 
-This is the README for your extension "claude-usage-monitor". After writing up a brief description, we recommend including the following sections.
+A VS Code extension that provides real-time monitoring of Claude Code token usage, cost tracking, and session management.
+
+![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/claude-usage-monitor)
+![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/claude-usage-monitor)
+
+## Overview
+
+Monitor your Claude Code usage directly in VS Code. This extension reads local conversation data and displays real-time metrics including token consumption, costs, burn rate predictions, and session timing - helping you stay within your plan limits and avoid unexpected interruptions.
 
 ## Features
 
-Describe specific features of your extension including screenshots of your extension in action. Image paths are relative to this README file.
+### 📊 Real-Time Token Tracking
+- **Input tokens** - Tokens sent in your prompts
+- **Output tokens** - Tokens in Claude's responses
+- **Cache tokens** - Separate tracking for cache creation and reads
+- **Live updates** - Automatic refresh as you use Claude Code
 
-For example if there is an image subfolder under your extension project workspace:
+### 💰 Cost Calculations
+- Track spending per session with model-specific pricing
+- Support for Pro, Max5, Max20, and Custom plans
+- Historical cost analysis
 
-\!\[feature X\]\(images/feature-x.png\)
+### ⏱️ Session Management
+- **5-hour rolling windows** - Matches Claude Code's session limits exactly
+- **Session timer** - See when your current session started and when it will reset
+- **Time remaining** - Know how much time you have left
+- **End time display** - Status bar shows when session expires
 
-> Tip: Many popular extensions utilize animations. This is an excellent way to show off your extension! We recommend short, focused animations that are easy to follow.
+### 🔥 Burn Rate Predictions
+- Real-time tokens-per-minute consumption
+- Predict when you'll hit your limit
+- Adjust usage before reaching thresholds
+
+### 🎨 Visual Indicators
+- **Color-coded status bar**
+  - 🟢 Green: < 60% of limit
+  - 🟡 Yellow: 60-80% of limit
+  - 🔴 Red: > 80% of limit
+- **Quick popover** - Click status bar for instant details
+- **Smart warnings** - Alerts at 80% and 100% thresholds
+
+## Installation
+
+1. Install from VS Code Marketplace (coming soon)
+2. Or install manually:
+   ```bash
+   code --install-extension claude-usage-monitor-0.0.1.vsix
+   ```
+
+## Usage
+
+### Status Bar
+
+The extension displays a compact status in the bottom-right corner:
+
+```
+🔥 7:30 PM - 28.1%
+```
+
+Shows:
+- 🔥 Icon indicating monitoring is active
+- **7:30 PM** - When your session will expire (5 hours from start)
+- **28.1%** - Percentage of your token limit used
+
+**Click the status bar** to open a quick popover with detailed metrics.
+
+### Quick Popover
+
+Click the status bar icon to see:
+- Session timing (start, end, remaining)
+- Token usage breakdown
+- Burn rate and predictions
+- Current plan limits
+
+## Configuration
+
+### Plan Settings
+
+Configure your Claude Code plan in VS Code settings:
+
+```json
+{
+  "claudeMonitor.plan": "pro",  // Options: "pro", "max5", "max20", "custom"
+  "claudeMonitor.customLimitTokens": 50000,  // For custom plan
+  "claudeMonitor.refreshInterval": 5  // Update interval in seconds
+}
+```
+
+### Plan Limits
+
+| Plan | Token Limit |
+|------|-------------|
+| **Pro** | 44,000 |
+| **Max5** | 88,000 |
+| **Max20** | 220,000 |
+| **Custom** | User-defined |
+
+### Custom Plan
+
+Set a personalized token limit based on your usage patterns:
+
+```json
+{
+  "claudeMonitor.plan": "custom",
+  "claudeMonitor.customLimitTokens": 60000
+}
+```
+
+### Data Path Override
+
+Override Claude's data directories if needed:
+
+```json
+{
+  "claudeMonitor.dataPaths": [
+    "/custom/path/to/claude/projects"
+  ]
+}
+```
+
+Or set the `CLAUDE_CONFIG_DIR` environment variable.
+
+## How It Works
+
+### Data Source
+
+Claude Code stores conversation data locally in JSONL files:
+- **Windows**: `%USERPROFILE%\.claude\projects\`
+- **macOS/Linux**: `~/.claude/projects/` or `~/.config/claude/projects/`
+
+The extension monitors these files for changes and calculates metrics in real-time.
+
+### Session Windows
+
+Claude Code enforces **5-hour rolling sessions**. The extension:
+1. Detects your first message timestamp
+2. Calculates session expiry (exactly 5 hours later)
+3. Tracks token usage within the active window
+4. Resets when the session expires
+
+### Token Calculation
+
+**What counts toward your limit:**
+- ✅ `input_tokens` - Your prompts
+- ✅ `output_tokens` - Claude's responses
+
+**What doesn't count:**
+- ❌ `cache_creation_input_tokens` - Cache overhead
+- ❌ `cache_read_input_tokens` - Cache hits
+
+This matches Claude Code's official limit calculation.
+
+### Privacy
+
+All data processing happens **locally on your machine**:
+- ✅ No data sent to external servers
+- ✅ No telemetry or analytics
+- ✅ No account required
+- ✅ Reads only your local Claude files
 
 ## Requirements
 
-If you have any requirements or dependencies, add a section describing those and how to install and configure them.
-
-## Extension Settings
-
-Include if your extension adds any VS Code settings through the `contributes.configuration` extension point.
-
-For example:
-
-This extension contributes the following settings:
-
-* `myExtension.enable`: Enable/disable this extension.
-* `myExtension.thing`: Set to `blah` to do something.
+- **VS Code**: 1.85.0 or higher
+- **Claude Code**: Active installation with local conversation data
+- **Node.js**: Only for development
 
 ## Known Issues
 
-Calling out known issues can help limit users opening duplicate issues against your extension.
+- File watching may have a brief delay (~1-5 seconds) on some systems
+- Multiple concurrent sessions are aggregated globally (matches Claude's behavior)
 
-## Release Notes
+## Commands
 
-Users appreciate release notes as you update your extension.
+Access these via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
 
-### 1.0.0
+- `Claude Monitor: Show Details` - Open detailed metrics popover
+- `Claude Monitor: Refresh` - Force refresh metrics
 
-Initial release of ...
+## Development
 
-### 1.0.1
+### Building
 
-Fixed issue #.
+```bash
+npm install
+npm run compile
+```
 
-### 1.1.0
+### Packaging
 
-Added features X, Y, and Z.
+```bash
+npm run package  # Compile and lint
+vsce package     # Create .vsix
+```
+
+### Testing
+
+```bash
+npm run test
+```
+
+### Contributing
+
+Contributions welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+## Credits
+
+Inspired by [maciek-roboblog/claude-code-usage-monitor](https://github.com/maciek-roboblog/claude-code-usage-monitor) - the original Python terminal-based monitor.
+
+## Support
+
+- **Issues**: [GitHub Issues](https://github.com/yahya/claude-usage-monitor/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yahya/claude-usage-monitor/discussions)
+
+## License
+
+MIT License - see [LICENSE](LICENSE) file for details.
 
 ---
 
-## Following extension guidelines
-
-Ensure that you've read through the extensions guidelines and follow the best practices for creating your extension.
-
-* [Extension Guidelines](https://code.visualstudio.com/api/references/extension-guidelines)
-
-## Working with Markdown
-
-You can author your README using Visual Studio Code. Here are some useful editor keyboard shortcuts:
-
-* Split the editor (`Cmd+\` on macOS or `Ctrl+\` on Windows and Linux).
-* Toggle preview (`Shift+Cmd+V` on macOS or `Shift+Ctrl+V` on Windows and Linux).
-* Press `Ctrl+Space` (Windows, Linux, macOS) to see a list of Markdown snippets.
-
-## For more information
-
-* [Visual Studio Code's Markdown Support](http://code.visualstudio.com/docs/languages/markdown)
-* [Markdown Syntax Reference](https://help.github.com/articles/markdown-basics/)
-
-**Enjoy!**
+**Enjoy coding with Claude!** 🚀
