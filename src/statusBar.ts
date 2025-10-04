@@ -1,6 +1,6 @@
 import * as vscode from 'vscode';
 import { SessionMetrics, PlanConfig } from './types';
-import { formatTimeRemaining, getStatusColor } from './sessionCalculator';
+import { formatTimeRemaining } from './sessionCalculator';
 
 /**
  * Manages the status bar item showing session information
@@ -34,8 +34,9 @@ export class StatusBarManager {
 			: 'Expired';
 		const burnRate = Math.round(session.burnRate);
 
-		// Build status text
-		this.statusBarItem.text = `$(claude-icon) ${session.totalTokens.toLocaleString()}/${planConfig.tokenLimit.toLocaleString()} (${usagePercent.toFixed(1)}%)`;
+		// Build status text with end time and percentage
+		const endTime = session.sessionEndTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+		this.statusBarItem.text = `$(claude-icon) ${endTime} - ${usagePercent.toFixed(1)}%`;
 
 		// Build tooltip with detailed info
 		this.statusBarItem.tooltip = new vscode.MarkdownString(
@@ -49,7 +50,6 @@ export class StatusBarManager {
 		);
 
 		// Set color based on usage
-		const statusColor = getStatusColor(usagePercent);
 		if (usagePercent >= 80) {
 			this.statusBarItem.backgroundColor = new vscode.ThemeColor(
 				usagePercent >= 100 ? 'statusBarItem.errorBackground' : 'statusBarItem.warningBackground'
