@@ -4,7 +4,7 @@ import * as os from 'os';
 import * as fs from 'fs';
 import { StatusBarManager } from './statusBar';
 import { SessionHoverPanel } from './sessionPopover';
-import { parseSessionFile, extractSessionId } from './sessionParser';
+import { parseSessionFile } from './sessionParser';
 import { calculateSessionMetrics } from './sessionCalculator';
 import { SessionMetrics, PlanConfig } from './types';
 
@@ -38,15 +38,15 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	/**
-	 * Find and process the most recent active session across ALL projects
+	 * Collect all messages from all session files across ALL projects
 	 */
 	async function updateMetrics() {
 		try {
 			console.log('🔄 Updating metrics...');
 
-			let allActiveSessions: Array<{metrics: SessionMetrics; filePath: string}> = [];
+			let allMessages: Array<{message: any; filePath: string}> = [];
 
-			// Check ALL project directories for active sessions
+			// Step 1: Collect ALL messages from ALL files across ALL projects
 			for (const basePath of claudeDataPaths) {
 				const projectDirs = fs.readdirSync(basePath);
 
@@ -59,22 +59,16 @@ export function activate(context: vscode.ExtensionContext) {
 
 					const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
 
-					// Check each session file
+					// Read each session file
 					for (const file of files) {
 						const filePath = path.join(projectPath, file);
 
 						try {
 							const messages = await parseSessionFile(filePath);
 
-							if (messages.length === 0) {
-								continue;
-							}
-
-							const sessionId = extractSessionId(filePath);
-							const metrics = calculateSessionMetrics(messages, sessionId);
-
-							if (metrics && metrics.isActive) {
-								allActiveSessions.push({ metrics, filePath });
+							// Add all messages with their source file
+							for (const message of messages) {
+								allMessages.push({ message, filePath });
 							}
 						} catch (err) {
 							// Skip files that can't be parsed
@@ -84,19 +78,26 @@ export function activate(context: vscode.ExtensionContext) {
 				}
 			}
 
-			console.log(`📊 Found ${allActiveSessions.length} active session(s)`);
+			console.log(`📊 Collected ${allMessages.length} total messages`);
 
-			if (allActiveSessions.length > 0) {
-				// Pick the session with the most recent activity
-				const mostRecent = allActiveSessions.sort(
-					(a, b) => b.metrics.lastMessageTime.getTime() - a.metrics.lastMessageTime.getTime()
-				)[0];
+			if (allMessages.length === 0) {
+				console.log('   └─ ⚠️ No messages found');
+				currentSession = null;
+				statusBar.update(null, planConfig);
+				return;
+			}
 
-				console.log(`✅ Most recent active session: ${mostRecent.filePath}`);
-				console.log(`   └─ Last activity: ${mostRecent.metrics.lastMessageTime.toLocaleString()}`);
-				console.log(`   └─ Tokens: ${mostRecent.metrics.totalTokens}`);
+			// Step 2: Extract just the messages and calculate metrics
+			const justMessages = allMessages.map(m => m.message);
+			const metrics = calculateSessionMetrics(justMessages, 'combined');
 
-				currentSession = mostRecent.metrics;
+			if (metrics && metrics.isActive) {
+				console.log(`✅ Active session found`);
+				console.log(`   └─ Started: ${metrics.startTime.toLocaleString()}`);
+				console.log(`   └─ Last activity: ${metrics.lastMessageTime.toLocaleString()}`);
+				console.log(`   └─ Tokens: ${metrics.totalTokens}`);
+
+				currentSession = metrics;
 				statusBar.update(currentSession, planConfig);
 			} else {
 				console.log('   └─ ⚠️ No active sessions');

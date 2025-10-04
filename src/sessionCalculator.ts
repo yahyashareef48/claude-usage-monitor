@@ -5,7 +5,7 @@ const SESSION_DURATION_MS = 5 * 60 * 60 * 1000; // 5 hours in milliseconds
 const BURN_RATE_WINDOW_MS = 10 * 60 * 1000; // Last 10 minutes for burn rate
 
 /**
- * Calculate session metrics from parsed messages
+ * Calculate session metrics from ALL messages across all files
  */
 export function calculateSessionMetrics(
 	messages: ClaudeMessage[],
@@ -15,26 +15,61 @@ export function calculateSessionMetrics(
 		return null;
 	}
 
-	// Sort messages by timestamp
+	const now = new Date();
+
+	// Step 1: Sort all messages by timestamp
 	const sortedMessages = [...messages].sort(
 		(a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
 	);
 
-	const startTime = new Date(sortedMessages[0].timestamp);
-	const lastMessageTime = new Date(sortedMessages[sortedMessages.length - 1].timestamp);
-	const sessionEndTime = new Date(startTime.getTime() + SESSION_DURATION_MS);
-	const now = new Date();
+	// Step 2: Filter to only today's messages
+	const startOfToday = new Date(now);
+	startOfToday.setHours(0, 0, 0, 0);
+
+	const todayMessages = sortedMessages.filter(msg => {
+		const msgTime = new Date(msg.timestamp);
+		return msgTime >= startOfToday;
+	});
+
+	if (todayMessages.length === 0) {
+		return null; // No messages from today
+	}
+
+	// Step 3: Group into 5-hour sets starting from the very first message of today
+	const sets = groupIntoFiveHourSets(todayMessages);
+
+	if (sets.length === 0) {
+		return null;
+	}
+
+	// Step 4: Find the last set that overlaps with current time
+	// A set overlaps if current time is between startTime and endTime
+	const activeSets = sets.filter(set => {
+		return now >= set.startTime && now <= set.endTime;
+	});
+
+	// Get the last (most recent) overlapping set
+	const activeSet = activeSets.length > 0 ? activeSets[activeSets.length - 1] : null;
+
+	if (!activeSet) {
+		return null; // No active session - all sets have expired
+	}
+
+	// Calculate metrics for the active set
+	const startTime = activeSet.startTime;
+	const lastMessageTime = activeSet.lastMessageTime;
+	const sessionEndTime = activeSet.endTime;
 	const timeRemaining = Math.max(0, sessionEndTime.getTime() - now.getTime());
 	const isActive = timeRemaining > 0;
 
-	// Calculate token totals
+	// Calculate token totals for messages in this set
 	let totalTokens = 0;
 	let inputTokens = 0;
 	let cacheCreationTokens = 0;
 	let cacheReadTokens = 0;
 	let outputTokens = 0;
 
-	for (const message of sortedMessages) {
+	for (const message of activeSet.messages) {
 		if (message.usage) {
 			totalTokens += calculateTokensFromUsage(message.usage);
 			inputTokens += message.usage.input_tokens;
@@ -45,7 +80,7 @@ export function calculateSessionMetrics(
 	}
 
 	// Calculate burn rate (tokens per minute over last 10 minutes)
-	const burnRate = calculateBurnRate(sortedMessages, now);
+	const burnRate = calculateBurnRate(activeSet.messages, now);
 
 	return {
 		totalTokens,
@@ -53,7 +88,7 @@ export function calculateSessionMetrics(
 		cacheCreationTokens,
 		cacheReadTokens,
 		outputTokens,
-		messages: sortedMessages.length,
+		messages: activeSet.messages.length,
 		startTime,
 		lastMessageTime,
 		sessionId,
@@ -62,6 +97,61 @@ export function calculateSessionMetrics(
 		isActive,
 		burnRate
 	};
+}
+
+/**
+ * Group messages into 5-hour sets
+ * Starting from the first message, create a 5-hour window.
+ * Any messages outside that window start a new 5-hour set.
+ */
+interface SessionSet {
+	startTime: Date;
+	endTime: Date;
+	lastMessageTime: Date;
+	messages: ClaudeMessage[];
+}
+
+function groupIntoFiveHourSets(messages: ClaudeMessage[]): SessionSet[] {
+	if (messages.length === 0) {
+		return [];
+	}
+
+	const sets: SessionSet[] = [];
+	let currentSet: SessionSet | null = null;
+
+	for (const message of messages) {
+		const msgTime = new Date(message.timestamp);
+
+		if (!currentSet) {
+			// Start first set from the very first message
+			currentSet = {
+				startTime: msgTime,
+				endTime: new Date(msgTime.getTime() + SESSION_DURATION_MS),
+				lastMessageTime: msgTime,
+				messages: [message]
+			};
+		} else if (msgTime <= currentSet.endTime) {
+			// Message falls within current 5-hour set
+			currentSet.messages.push(message);
+			currentSet.lastMessageTime = msgTime;
+		} else {
+			// Message is outside current set - save current and start new set
+			sets.push(currentSet);
+			currentSet = {
+				startTime: msgTime,
+				endTime: new Date(msgTime.getTime() + SESSION_DURATION_MS),
+				lastMessageTime: msgTime,
+				messages: [message]
+			};
+		}
+	}
+
+	// Add the last set
+	if (currentSet) {
+		sets.push(currentSet);
+	}
+
+	return sets;
 }
 
 /**
