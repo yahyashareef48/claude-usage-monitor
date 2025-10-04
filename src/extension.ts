@@ -38,12 +38,15 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	/**
-	 * Find and process the most recent session file
+	 * Find and process the most recent active session across ALL projects
 	 */
 	async function updateMetrics() {
 		try {
 			console.log('🔄 Updating metrics...');
 
+			let allActiveSessions: Array<{metrics: SessionMetrics; filePath: string}> = [];
+
+			// Check ALL project directories for active sessions
 			for (const basePath of claudeDataPaths) {
 				const projectDirs = fs.readdirSync(basePath);
 
@@ -56,44 +59,50 @@ export function activate(context: vscode.ExtensionContext) {
 
 					const files = fs.readdirSync(projectPath).filter(f => f.endsWith('.jsonl'));
 
-					if (files.length === 0) {
-						continue;
-					}
+					// Check each session file
+					for (const file of files) {
+						const filePath = path.join(projectPath, file);
 
-					// Get most recently modified file
-					const sortedFiles = files
-						.map(f => ({
-							path: path.join(projectPath, f),
-							mtime: fs.statSync(path.join(projectPath, f)).mtime
-						}))
-						.sort((a, b) => b.mtime.getTime() - a.mtime.getTime());
+						try {
+							const messages = await parseSessionFile(filePath);
 
-					const mostRecent = sortedFiles[0].path;
-					console.log('📄 Processing:', mostRecent);
+							if (messages.length === 0) {
+								continue;
+							}
 
-					const messages = await parseSessionFile(mostRecent);
-					console.log(`   └─ ${messages.length} messages`);
+							const sessionId = extractSessionId(filePath);
+							const metrics = calculateSessionMetrics(messages, sessionId);
 
-					if (messages.length === 0) {
-						continue;
-					}
-
-					const sessionId = extractSessionId(mostRecent);
-					const metrics = calculateSessionMetrics(messages, sessionId);
-
-					if (metrics && metrics.isActive) {
-						console.log(`   └─ ✅ Active session: ${metrics.totalTokens} tokens`);
-						currentSession = metrics;
-						statusBar.update(currentSession, planConfig);
-						return; // Found active session
+							if (metrics && metrics.isActive) {
+								allActiveSessions.push({ metrics, filePath });
+							}
+						} catch (err) {
+							// Skip files that can't be parsed
+							console.warn(`Skipping ${filePath}:`, err);
+						}
 					}
 				}
 			}
 
-			// No active session found
-			console.log('   └─ ⚠️ No active session');
-			currentSession = null;
-			statusBar.update(null, planConfig);
+			console.log(`📊 Found ${allActiveSessions.length} active session(s)`);
+
+			if (allActiveSessions.length > 0) {
+				// Pick the session with the most recent activity
+				const mostRecent = allActiveSessions.sort(
+					(a, b) => b.metrics.lastMessageTime.getTime() - a.metrics.lastMessageTime.getTime()
+				)[0];
+
+				console.log(`✅ Most recent active session: ${mostRecent.filePath}`);
+				console.log(`   └─ Last activity: ${mostRecent.metrics.lastMessageTime.toLocaleString()}`);
+				console.log(`   └─ Tokens: ${mostRecent.metrics.totalTokens}`);
+
+				currentSession = mostRecent.metrics;
+				statusBar.update(currentSession, planConfig);
+			} else {
+				console.log('   └─ ⚠️ No active sessions');
+				currentSession = null;
+				statusBar.update(null, planConfig);
+			}
 
 		} catch (error) {
 			console.error('❌ Error updating metrics:', error);
