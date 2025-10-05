@@ -29,6 +29,22 @@
       {
         "command": "claude-usage-monitor.showPopup",
         "title": "Claude: Show Popup"
+      },
+      {
+        "command": "claude-usage-monitor.setPlanPro",
+        "title": "Claude: Set Plan to Pro (44k)"
+      },
+      {
+        "command": "claude-usage-monitor.setPlanMax5",
+        "title": "Claude: Set Plan to Max5 (88k)"
+      },
+      {
+        "command": "claude-usage-monitor.setPlanMax20",
+        "title": "Claude: Set Plan to Max20 (220k)"
+      },
+      {
+        "command": "claude-usage-monitor.setPlanCustom",
+        "title": "Claude: Set Plan to Custom"
       }
     ],
     "icons": {

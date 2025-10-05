@@ -15,10 +15,13 @@ export function activate(context: vscode.ExtensionContext) {
 	const statusBar = new StatusBarManager();
 	const hoverPanel = new SessionHoverPanel(context.extensionUri);
 
-	// Configuration
+	// Configuration - Load from workspace state or default to 'pro'
+	const savedPlan = context.workspaceState.get<'pro' | 'max5' | 'max20' | 'custom'>('claudeMonitor.plan', 'pro');
+	const savedLimit = context.workspaceState.get<number>('claudeMonitor.tokenLimit', 44000);
+
 	const planConfig: PlanConfig = {
-		plan: 'pro',
-		tokenLimit: 44000
+		plan: savedPlan,
+		tokenLimit: savedLimit
 	};
 
 	// State
@@ -120,12 +123,62 @@ export function activate(context: vscode.ExtensionContext) {
 		dispose: () => clearInterval(interval)
 	});
 
+	// Helper function to update plan
+	async function updatePlan(plan: 'pro' | 'max5' | 'max20' | 'custom', tokenLimit: number) {
+		planConfig.plan = plan;
+		planConfig.tokenLimit = tokenLimit;
+
+		// Save to workspace state
+		await context.workspaceState.update('claudeMonitor.plan', plan);
+		await context.workspaceState.update('claudeMonitor.tokenLimit', tokenLimit);
+
+		// Update UI
+		statusBar.update(currentSession, planConfig);
+
+		// Show confirmation
+		vscode.window.showInformationMessage(
+			`Claude plan set to ${plan.toUpperCase()} (${tokenLimit.toLocaleString()} tokens)`
+		);
+	}
+
 	// Register command to show popover
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
 		hoverPanel.show(currentSession, planConfig);
 	});
 
-	context.subscriptions.push(statusBar, hoverPanel, showPopup);
+	// Register plan selection commands
+	const setPlanPro = vscode.commands.registerCommand('claude-usage-monitor.setPlanPro', () => {
+		updatePlan('pro', 44000);
+	});
+
+	const setPlanMax5 = vscode.commands.registerCommand('claude-usage-monitor.setPlanMax5', () => {
+		updatePlan('max5', 88000);
+	});
+
+	const setPlanMax20 = vscode.commands.registerCommand('claude-usage-monitor.setPlanMax20', () => {
+		updatePlan('max20', 220000);
+	});
+
+	const setPlanCustom = vscode.commands.registerCommand('claude-usage-monitor.setPlanCustom', async () => {
+		const input = await vscode.window.showInputBox({
+			prompt: 'Enter custom token limit',
+			placeHolder: '100000',
+			validateInput: (value) => {
+				const num = parseInt(value);
+				if (isNaN(num) || num <= 0) {
+					return 'Please enter a valid positive number';
+				}
+				return null;
+			}
+		});
+
+		if (input) {
+			const tokenLimit = parseInt(input);
+			updatePlan('custom', tokenLimit);
+		}
+	});
+
+	context.subscriptions.push(statusBar, hoverPanel, showPopup, setPlanPro, setPlanMax5, setPlanMax20, setPlanCustom);
 }
 
 /**
