@@ -56,12 +56,12 @@ Monitor your Claude Code usage directly in VS Code. This extension reads local c
 The extension displays a compact status in the bottom-right corner:
 
 ```
-🔥 7:30 PM - 28.1%
+🔥 3h 45m - 28.1%
 ```
 
 Shows:
 - 🔥 Icon indicating monitoring is active
-- **7:30 PM** - When your session will expire (5 hours from start)
+- **3h 45m** - Time remaining until session expires
 - **28.1%** - Percentage of your token limit used
 
 **Click the status bar** to open a quick popover with detailed metrics.
