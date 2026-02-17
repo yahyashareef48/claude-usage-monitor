@@ -271,12 +271,24 @@ export function formatTimeRemaining(ms: number): string {
 /**
  * Format date to readable string
  */
-export function formatDateTime(date: Date): string {
-	return date.toLocaleString('en-US', {
+export function formatDateTime(date: Date, use24Hour: boolean = false): string {
+	return date.toLocaleString(use24Hour ? 'en-GB' : 'en-US', {
 		month: 'short',
 		day: 'numeric',
 		hour: '2-digit',
-		minute: '2-digit'
+		minute: '2-digit',
+		hour12: !use24Hour
+	});
+}
+
+/**
+ * Format time only (HH:MM or h:MM AM/PM)
+ */
+export function formatTime(date: Date, use24Hour: boolean = false): string {
+	return date.toLocaleTimeString(use24Hour ? 'en-GB' : 'en-US', {
+		hour: '2-digit',
+		minute: '2-digit',
+		hour12: !use24Hour
 	});
 }
 

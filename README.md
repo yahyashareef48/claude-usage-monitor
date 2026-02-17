@@ -84,7 +84,28 @@ Configure your Claude Code plan in VS Code settings:
 {
   "claudeMonitor.plan": "pro",  // Options: "pro", "max5", "max20", "custom"
   "claudeMonitor.customLimitTokens": 50000,  // For custom plan
-  "claudeMonitor.refreshInterval": 5  // Update interval in seconds
+  "claudeMonitor.refreshInterval": 5,  // Update interval in seconds
+  "claudeMonitor.timeFormat": "auto"  // Options: "12h", "24h", "auto"
+}
+```
+
+### Time Format
+
+Control how times are displayed throughout the extension:
+
+| Option | Description | Example |
+|--------|-------------|---------|
+| `"12h"` | 12-hour format with AM/PM | 1:45 PM |
+| `"24h"` | 24-hour format (military time) | 13:45 |
+| `"auto"` | Automatically detect from system locale | Varies by locale |
+
+**Default**: `"auto"` - automatically uses your system's locale preference.
+
+To set 24-hour format explicitly:
+
+```json
+{
+  "claudeMonitor.timeFormat": "24h"
 }
 ```
 
