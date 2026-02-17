@@ -8,6 +8,27 @@ import { parseSessionFile } from './sessionParser';
 import { calculateSessionMetrics } from './sessionCalculator';
 import { SessionMetrics, PlanConfig } from './types';
 
+/**
+ * Get time format preference from configuration
+ */
+function getTimeFormatPreference(): boolean {
+	const config = vscode.workspace.getConfiguration('claudeMonitor');
+	const timeFormat = config.get<string>('timeFormat', 'auto');
+	
+	if (timeFormat === '24h') {
+		return true;
+	} else if (timeFormat === '12h') {
+		return false;
+	}
+	
+	// Auto-detect based on locale
+	// Use a test date to determine the default locale format
+	const testDate = new Date(2000, 0, 1, 13, 0, 0); // 1 PM
+	const timeString = testDate.toLocaleTimeString();
+	// If the string contains 'PM' or 'AM', it's 12-hour format
+	return !timeString.includes('PM') && !timeString.includes('AM');
+}
+
 export function activate(context: vscode.ExtensionContext) {
 	console.log('Claude Usage Monitor is now active!');
 
@@ -26,6 +47,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// State
 	let currentSession: SessionMetrics | null = null;
+	let use24Hour = getTimeFormatPreference();
 
 	statusBar.showInitializing();
 
@@ -101,11 +123,11 @@ export function activate(context: vscode.ExtensionContext) {
 				console.log(`   └─ Tokens: ${metrics.totalTokens}`);
 
 				currentSession = metrics;
-				statusBar.update(currentSession, planConfig);
+				statusBar.update(currentSession, planConfig, use24Hour);
 			} else {
 				console.log('   └─ ⚠️ No active sessions');
 				currentSession = null;
-				statusBar.update(null, planConfig);
+				statusBar.update(null, planConfig, use24Hour);
 			}
 
 		} catch (error) {
@@ -119,9 +141,19 @@ export function activate(context: vscode.ExtensionContext) {
 	// Update every 5 seconds
 	const interval = setInterval(updateMetrics, 5000);
 
+	// Listen for configuration changes
+	const configListener = vscode.workspace.onDidChangeConfiguration(e => {
+		if (e.affectsConfiguration('claudeMonitor.timeFormat')) {
+			use24Hour = getTimeFormatPreference();
+			statusBar.update(currentSession, planConfig, use24Hour);
+			console.log(`⏰ Time format changed to ${use24Hour ? '24-hour' : '12-hour'}`);
+		}
+	});
+
 	context.subscriptions.push({
 		dispose: () => clearInterval(interval)
 	});
+	context.subscriptions.push(configListener);
 
 	// Helper function to update plan
 	async function updatePlan(plan: 'pro' | 'max5' | 'max20' | 'custom', tokenLimit: number) {
@@ -133,7 +165,7 @@ export function activate(context: vscode.ExtensionContext) {
 		await context.workspaceState.update('claudeMonitor.tokenLimit', tokenLimit);
 
 		// Update UI
-		statusBar.update(currentSession, planConfig);
+		statusBar.update(currentSession, planConfig, use24Hour);
 
 		// Show confirmation
 		vscode.window.showInformationMessage(
@@ -143,7 +175,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Register command to show popover
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
-		hoverPanel.show(currentSession, planConfig);
+		hoverPanel.show(currentSession, planConfig, use24Hour);
 	});
 
 	// Register plan selection commands

@@ -10,9 +10,9 @@ export class SessionHoverPanel {
 
 	constructor(private extensionUri: vscode.Uri) {}
 
-	public show(session: SessionMetrics | null, planConfig: PlanConfig) {
+	public show(session: SessionMetrics | null, planConfig: PlanConfig, use24Hour: boolean = false) {
 		if (this.panel) {
-			this.panel.webview.html = this.getHtmlContent(session, planConfig);
+			this.panel.webview.html = this.getHtmlContent(session, planConfig, use24Hour);
 			this.panel.reveal(vscode.ViewColumn.One, true);
 			return;
 		}
@@ -27,7 +27,7 @@ export class SessionHoverPanel {
 			}
 		);
 
-		this.panel.webview.html = this.getHtmlContent(session, planConfig);
+		this.panel.webview.html = this.getHtmlContent(session, planConfig, use24Hour);
 
 		this.panel.onDidDispose(() => {
 			this.panel = undefined;
@@ -38,7 +38,7 @@ export class SessionHoverPanel {
 		this.panel?.dispose();
 	}
 
-	private getHtmlContent(session: SessionMetrics | null, planConfig: PlanConfig): string {
+	private getHtmlContent(session: SessionMetrics | null, planConfig: PlanConfig, use24Hour: boolean = false): string {
 		if (!session) {
 			return this.getNoSessionHtml();
 		}
@@ -142,11 +142,11 @@ export class SessionHoverPanel {
 		<div class="section-title">Session Timing</div>
 		<div class="row">
 			<span class="label">Started</span>
-			<span class="value">${formatDateTime(session.startTime)}</span>
+			<span class="value">${formatDateTime(session.startTime, use24Hour)}</span>
 		</div>
 		<div class="row">
 			<span class="label">Ends</span>
-			<span class="value">${formatDateTime(session.sessionEndTime)}</span>
+			<span class="value">${formatDateTime(session.sessionEndTime, use24Hour)}</span>
 		</div>
 		<div class="row">
 			<span class="label">Time Left</span>
