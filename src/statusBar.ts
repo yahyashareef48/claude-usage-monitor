@@ -1,6 +1,6 @@
 import * as vscode from "vscode";
 import { SessionMetrics, PlanConfig } from "./types";
-import { formatTimeRemaining } from "./sessionCalculator";
+import { formatTimeRemaining, formatTime } from "./sessionCalculator";
 
 /**
  * Manages the status bar item showing session information
@@ -17,7 +17,7 @@ export class StatusBarManager {
   /**
    * Update status bar with session metrics
    */
-  public update(session: SessionMetrics | null, planConfig: PlanConfig) {
+  public update(session: SessionMetrics | null, planConfig: PlanConfig, use24Hour: boolean = false) {
     if (!session) {
       this.statusBarItem.text = "$(claude-icon) No Session";
       this.statusBarItem.tooltip = "No active Claude session";
@@ -38,8 +38,8 @@ export class StatusBarManager {
         `**Tokens:** ${session.totalTokens.toLocaleString()} / ${planConfig.tokenLimit.toLocaleString()} (${usagePercent.toFixed(1)}%)\n\n` +
         `**Time Remaining:** ${timeRemaining}\n\n` +
         `**Burn Rate:** ${burnRate} tokens/min\n\n` +
-        `**Started:** ${session.startTime.toLocaleTimeString()}\n\n` +
-        `**Ends:** ${session.sessionEndTime.toLocaleTimeString()}\n\n` +
+        `**Started:** ${formatTime(session.startTime, use24Hour)}\n\n` +
+        `**Ends:** ${formatTime(session.sessionEndTime, use24Hour)}\n\n` +
         `_Click to view details_`
     );
 

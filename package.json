@@ -55,6 +55,22 @@
           "fontCharacter": "\\005E"
         }
       }
+    },
+    "configuration": {
+      "title": "Claude Usage Monitor",
+      "properties": {
+        "claudeMonitor.timeFormat": {
+          "type": "string",
+          "enum": ["12h", "24h", "auto"],
+          "default": "auto",
+          "description": "Time display format. 'auto' uses system locale preferences.",
+          "enumDescriptions": [
+            "12-hour format with AM/PM",
+            "24-hour format",
+            "Automatic based on system locale"
+          ]
+        }
+      }
     }
   },
   "scripts": {
