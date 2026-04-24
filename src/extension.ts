@@ -40,11 +40,11 @@ export function activate(context: vscode.ExtensionContext) {
 	let windowFocused = true;
 
 	function applyState(data: UsageData | null, error: string | null) {
-		currentData  = data;
+		if (data) { currentData = data; } // keep last good data on error
 		currentError = error;
-		if (data) {
-			statusBar.update(data);
-			panel.update(data, null);
+		if (currentData) {
+			statusBar.update(currentData, error);
+			panel.update(currentData, error);
 		} else {
 			statusBar.showError(error ?? 'Unknown error');
 			panel.update(null, error);

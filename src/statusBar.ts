@@ -25,7 +25,7 @@ export class StatusBarManager {
 		this.item.show();
 	}
 
-	public update(data: UsageData) {
+	public update(data: UsageData, error: string | null = null) {
 		const fh = data.fiveHour;
 		if (!fh) {
 			this.item.text = '$(claude-icon) No data';
@@ -37,8 +37,12 @@ export class StatusBarManager {
 		const pct = fh.utilization;
 		const timeLeft = formatTimeRemaining(fh.resetsAt);
 
-		this.item.text = `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft}`;
-		this.item.backgroundColor = utilizationColor(pct);
+		this.item.text = error
+			? `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft} $(warning)`
+			: `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft}`;
+		this.item.backgroundColor = error
+			? new vscode.ThemeColor('statusBarItem.warningBackground')
+			: utilizationColor(pct);
 
 		const sd = data.sevenDay;
 		const eu = data.extraUsage;
@@ -58,6 +62,9 @@ export class StatusBarManager {
 		if (eu?.isEnabled && eu.usedCredits !== null) {
 			const credits = (eu.usedCredits / 100).toFixed(2);
 			lines.push(`**Extra usage:** $${credits} ${eu.currency ?? ''}`);
+		}
+		if (error) {
+			lines.push(`⚠️ **Poll error:** ${error}`);
 		}
 		lines.push(`_Click for details · Updated ${data.fetchedAt.toLocaleTimeString()}_`);
 

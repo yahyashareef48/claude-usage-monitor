@@ -163,8 +163,8 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 </head>
 <body>
 <h1>Claude Usage</h1>
-<div class="subtitle">Updated ${timeAgo(data.fetchedAt)}</div>
-
+<div class="subtitle">Updated ${timeAgo(data.fetchedAt)} · <span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span></div>
+${error ? `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8;font-family:monospace">${error}</span></div>` : ''}
 <div class="section">
 	<div class="section-title">Quota Windows</div>
 	${buckets.length > 0 ? buckets.join("") : '<div class="no-quota">No active quota windows returned.</div>'}
