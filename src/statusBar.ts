@@ -1,80 +1,82 @@
-import * as vscode from "vscode";
-import { SessionMetrics, PlanConfig } from "./types";
-import { formatTimeRemaining } from "./sessionCalculator";
+import * as vscode from 'vscode';
+import { UsageData } from './types';
 
-/**
- * Manages the status bar item showing session information
- */
+function formatTimeRemaining(resetsAt: string): string {
+	const ms = new Date(resetsAt).getTime() - Date.now();
+	if (ms <= 0) { return 'resetting'; }
+	const totalMin = Math.floor(ms / 60_000);
+	const h = Math.floor(totalMin / 60);
+	const m = totalMin % 60;
+	return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function utilizationColor(pct: number): vscode.ThemeColor | undefined {
+	if (pct >= 80) { return new vscode.ThemeColor('statusBarItem.errorBackground'); }
+	if (pct >= 60) { return new vscode.ThemeColor('statusBarItem.warningBackground'); }
+	return undefined;
+}
+
 export class StatusBarManager {
-  private statusBarItem: vscode.StatusBarItem;
+	private item: vscode.StatusBarItem;
 
-  constructor() {
-    this.statusBarItem = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
-    this.statusBarItem.command = "claude-usage-monitor.showPopup";
-    this.statusBarItem.show();
-  }
+	constructor() {
+		this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
+		this.item.command = 'claude-usage-monitor.showPopup';
+		this.item.show();
+	}
 
-  /**
-   * Update status bar with session metrics
-   */
-  public update(session: SessionMetrics | null, planConfig: PlanConfig) {
-    if (!session) {
-      this.statusBarItem.text = "$(claude-icon) No Session";
-      this.statusBarItem.tooltip = "No active Claude session";
-      this.statusBarItem.backgroundColor = undefined;
-      return;
-    }
+	public update(data: UsageData) {
+		const fh = data.fiveHour;
+		if (!fh) {
+			this.item.text = '$(claude-icon) No data';
+			this.item.tooltip = 'No 5-hour quota data returned from API';
+			this.item.backgroundColor = undefined;
+			return;
+		}
 
-    const usagePercent = (session.totalTokens / planConfig.tokenLimit) * 100;
-    const timeRemaining = session.isActive ? formatTimeRemaining(session.timeRemaining) : "Expired";
-    const burnRate = Math.round(session.burnRate);
+		const pct = fh.utilization;
+		const timeLeft = formatTimeRemaining(fh.resetsAt);
 
-    // Build status text with time remaining and percentage
-    this.statusBarItem.text = ` $(claude-icon) ${timeRemaining} - ${usagePercent.toFixed(1)}%`;
+		this.item.text = `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft}`;
+		this.item.backgroundColor = utilizationColor(pct);
 
-    // Build tooltip with detailed info
-    this.statusBarItem.tooltip = new vscode.MarkdownString(
-      `**Claude Session Timer**\n\n` +
-        `**Tokens:** ${session.totalTokens.toLocaleString()} / ${planConfig.tokenLimit.toLocaleString()} (${usagePercent.toFixed(1)}%)\n\n` +
-        `**Time Remaining:** ${timeRemaining}\n\n` +
-        `**Burn Rate:** ${burnRate} tokens/min\n\n` +
-        `**Started:** ${session.startTime.toLocaleTimeString()}\n\n` +
-        `**Ends:** ${session.sessionEndTime.toLocaleTimeString()}\n\n` +
-        `_Click to view details_`
-    );
+		const sd = data.sevenDay;
+		const eu = data.extraUsage;
 
-    // Set color based on usage
-    if (usagePercent >= 80) {
-      this.statusBarItem.backgroundColor = new vscode.ThemeColor(
-        usagePercent >= 100 ? "statusBarItem.errorBackground" : "statusBarItem.warningBackground"
-      );
-    } else {
-      this.statusBarItem.backgroundColor = undefined;
-    }
-  }
+		const lines: string[] = [
+			`**5-hour window:** ${pct.toFixed(1)}% used — resets in ${timeLeft}`,
+		];
+		if (sd) {
+			lines.push(`**7-day window:** ${sd.utilization.toFixed(1)}% — resets ${formatTimeRemaining(sd.resetsAt)}`);
+		}
+		if (data.sevenDaySonnet) {
+			lines.push(`**7-day Sonnet:** ${data.sevenDaySonnet.utilization.toFixed(1)}%`);
+		}
+		if (data.sevenDayOpus) {
+			lines.push(`**7-day Opus:** ${data.sevenDayOpus.utilization.toFixed(1)}%`);
+		}
+		if (eu?.isEnabled && eu.usedCredits !== null) {
+			const credits = (eu.usedCredits / 100).toFixed(2);
+			lines.push(`**Extra usage:** $${credits} ${eu.currency ?? ''}`);
+		}
+		lines.push(`_Click for details · Updated ${data.fetchedAt.toLocaleTimeString()}_`);
 
-  /**
-   * Show a simple icon when starting up
-   */
-  public showInitializing() {
-    this.statusBarItem.text = "$(claude-icon) Initializing...";
-    this.statusBarItem.tooltip = "Claude Usage Monitor starting up...";
-    this.statusBarItem.backgroundColor = undefined;
-  }
+		this.item.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+	}
 
-  /**
-   * Show error state
-   */
-  public showError(message: string) {
-    this.statusBarItem.text = "$(claude-icon) Error";
-    this.statusBarItem.tooltip = message;
-    this.statusBarItem.backgroundColor = new vscode.ThemeColor("statusBarItem.errorBackground");
-  }
+	public showInitializing() {
+		this.item.text = '$(claude-icon) Connecting…';
+		this.item.tooltip = 'Fetching Claude usage data…';
+		this.item.backgroundColor = undefined;
+	}
 
-  /**
-   * Dispose of the status bar item
-   */
-  public dispose() {
-    this.statusBarItem.dispose();
-  }
+	public showError(message: string) {
+		this.item.text = '$(claude-icon) Error';
+		this.item.tooltip = message;
+		this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+	}
+
+	public dispose() {
+		this.item.dispose();
+	}
 }

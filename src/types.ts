@@ -2,67 +2,25 @@
  * Core types for Claude Usage Monitor
  */
 
-/**
- * Token usage data from a single message
- */
-export interface MessageUsage {
-	input_tokens: number;
-	cache_creation_input_tokens?: number;
-	cache_read_input_tokens?: number;
-	output_tokens: number;
+export interface QuotaBucket {
+	utilization: number; // percentage 0–100
+	resetsAt: string;    // ISO 8601
 }
 
-/**
- * A single message from Claude JSONL session file
- */
-export interface ClaudeMessage {
-	id: string;
-	timestamp: string; // ISO 8601 format
-	role: 'user' | 'assistant';
-	usage?: MessageUsage;
+export interface ExtraUsage {
+	isEnabled: boolean;
+	monthlyLimit: number | null;
+	usedCredits: number | null;
+	utilization: number | null;
+	currency: string | null;
 }
 
-/**
- * Session metrics and timing information
- */
-export interface SessionMetrics {
-	// Token counts
-	totalTokens: number;
-	inputTokens: number;
-	cacheCreationTokens: number;
-	cacheReadTokens: number;
-	outputTokens: number;
-
-	// Session metadata
-	messages: number;
-	startTime: Date;
-	lastMessageTime: Date;
-	sessionId: string;
-
-	// Timing
-	sessionEndTime: Date; // Predicted end (start + 5 hours)
-	timeRemaining: number; // Milliseconds until session ends
-	isActive: boolean; // Still within 5-hour window
-
-	// Performance metrics
-	burnRate: number; // Tokens per minute
-	estimatedTimeToLimit?: number; // Milliseconds until limit hit (if applicable)
-}
-
-/**
- * Configuration for token limits based on plan
- */
-export interface PlanConfig {
-	plan: 'pro' | 'max5' | 'max20' | 'custom';
-	tokenLimit: number;
-}
-
-/**
- * Overall monitoring state
- */
-export interface MonitorState {
-	activeSessions: SessionMetrics[];
-	totalTokensAcrossAllSessions: number;
-	planConfig: PlanConfig;
-	lastUpdate: Date;
+export interface UsageData {
+	fiveHour: QuotaBucket | null;
+	sevenDay: QuotaBucket | null;
+	sevenDaySonnet: QuotaBucket | null;
+	sevenDayOpus: QuotaBucket | null;
+	sevenDayOauthApps: QuotaBucket | null;
+	extraUsage: ExtraUsage | null;
+	fetchedAt: Date;
 }
