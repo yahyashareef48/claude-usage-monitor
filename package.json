@@ -1,6 +1,6 @@
 {
   "name": "claude-code-usage-tracker",
-  "displayName": "Claude Code Usage Tracker",
+  "displayName": "Claude Code Usage Monitor",
   "description": "Real-time monitoring of Claude Code token usage, cost tracking, and session management",
   "version": "1.0.0",
   "publisher": "YahyaShareef",
