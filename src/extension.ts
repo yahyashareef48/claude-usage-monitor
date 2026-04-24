@@ -4,13 +4,12 @@ import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { UsageData } from './types';
 
-const POLL_INTERVAL_MS = 60_000;
-const CACHE_TTL_MS     = 55_000; // treat cache as fresh if < 55s old
+const POLL_INTERVAL_MS = 2  * 60_000; // 2 minutes
+const CACHE_TTL_MS     = 115_000;     // treat cache as fresh if < ~2min old
 const BACKOFF_STEPS_MS = [
-	2  * 60_000,
-	4  * 60_000,
-	8  * 60_000,
-	16 * 60_000,
+	4  * 60_000,  // 1st error → wait 4 min
+	8  * 60_000,  // 2nd error → wait 8 min
+	16 * 60_000,  // 3rd+ error → wait 16 min
 ];
 
 const CACHE_KEY = 'claudeUsage.cache';

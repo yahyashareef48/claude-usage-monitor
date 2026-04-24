@@ -6,7 +6,7 @@ A VS Code extension that shows your real-time Claude Code quota usage directly i
 
 ## How It Works
 
-The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 30 seconds and displays the results without any additional login or configuration.
+The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 2 minutes (only when the window is focused) and displays the results without any additional login or configuration.
 
 ## Features
 
