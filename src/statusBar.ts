@@ -44,31 +44,53 @@ export class StatusBarManager {
 			? new vscode.ThemeColor('statusBarItem.warningBackground')
 			: utilizationColor(pct);
 
-		const sd = data.sevenDay;
-		const eu = data.extraUsage;
+		const sd  = data.sevenDay;
+		const eu  = data.extraUsage;
+
+		const bar = (p: number) => {
+			const filled = Math.round(Math.min(p, 100) / 10);
+			const color  = p >= 80 ? '🔴' : p >= 60 ? '🟡' : '🟢';
+			return `${'█'.repeat(filled)}${'░'.repeat(10 - filled)} ${p.toFixed(0)}%  ${color}`;
+		};
 
 		const lines: string[] = [
-			`**5-hour window:** ${pct.toFixed(1)}% used — resets in ${timeLeft}`,
+			`$(claude-icon) **Claude Usage**`,
+			`---`,
+			`**5-Hour Window**`,
+			`\`${bar(pct)}\``,
+			`↻ Resets in **${timeLeft}**`,
 		];
+
 		if (sd) {
-			lines.push(`**7-day window:** ${sd.utilization.toFixed(1)}% — resets ${formatTimeRemaining(sd.resetsAt)}`);
+			lines.push(
+				`\n**7-Day Window**`,
+				`\`${bar(sd.utilization)}\``,
+				`↻ Resets in **${formatTimeRemaining(sd.resetsAt)}**`,
+			);
 		}
+
 		if (data.sevenDaySonnet) {
-			lines.push(`**7-day Sonnet:** ${data.sevenDaySonnet.utilization.toFixed(1)}%`);
+			lines.push(`**7-Day Sonnet** \`${bar(data.sevenDaySonnet.utilization)}\``);
 		}
 		if (data.sevenDayOpus) {
-			lines.push(`**7-day Opus:** ${data.sevenDayOpus.utilization.toFixed(1)}%`);
+			lines.push(`**7-Day Opus** \`${bar(data.sevenDayOpus.utilization)}\``);
 		}
-		if (eu?.isEnabled && eu.usedCredits !== null) {
-			const credits = (eu.usedCredits / 100).toFixed(2);
-			lines.push(`**Extra usage:** $${credits} ${eu.currency ?? ''}`);
-		}
-		if (error) {
-			lines.push(`⚠️ **Poll error:** ${error}`);
-		}
-		lines.push(`_Click for details · Updated ${data.fetchedAt.toLocaleTimeString()}_`);
 
-		this.item.tooltip = new vscode.MarkdownString(lines.join('\n\n'));
+		if (eu?.isEnabled && eu.usedCredits !== null) {
+			const spent = (eu.usedCredits / 100).toFixed(2);
+			const cap   = eu.monthlyLimit !== null ? ` / $${(eu.monthlyLimit / 100).toFixed(2)}` : '';
+			lines.push(`\n**Extra Usage**  💳 $${spent}${cap} ${eu.currency ?? ''}`);
+		}
+
+		if (error) {
+			lines.push(`\n⚠️ *Poll failed — showing cached data*`);
+		}
+
+		lines.push(`\n---\n_Updated ${data.fetchedAt.toLocaleTimeString()} · Click to open panel_`);
+
+		const md = new vscode.MarkdownString(lines.join('\n\n'));
+		md.supportThemeIcons = true;
+		this.item.tooltip = md;
 	}
 
 	public showInitializing() {
