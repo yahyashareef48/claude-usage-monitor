@@ -11,18 +11,21 @@ export function activate(context: vscode.ExtensionContext) {
 	const panel = new UsagePanel(context.extensionUri);
 
 	let currentData: UsageData | null = null;
+	let currentError: string | null = null;
 
 	statusBar.showInitializing();
 
 	async function refresh() {
 		try {
 			currentData = await fetchUsageData();
+			currentError = null;
 			statusBar.update(currentData);
-			panel.update(currentData);
+			panel.update(currentData, null);
 		} catch (err) {
-			const msg = err instanceof Error ? err.message : String(err);
-			statusBar.showError(msg);
-			console.error('[Claude Usage Monitor]', msg);
+			currentError = err instanceof Error ? err.message : String(err);
+			statusBar.showError(currentError);
+			panel.update(null, currentError);
+			console.error('[Claude Usage Monitor]', currentError);
 		}
 	}
 
@@ -30,7 +33,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const interval = setInterval(refresh, POLL_INTERVAL_MS);
 
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
-		panel.show(currentData);
+		panel.show(currentData, currentError);
 	});
 
 	const refreshCmd = vscode.commands.registerCommand('claude-usage-monitor.refresh', () => {

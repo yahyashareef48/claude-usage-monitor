@@ -35,11 +35,12 @@ function bucketRow(label: string, bucket: QuotaBucket): string {
 		</div>`;
 }
 
-function buildHtml(data: UsageData | null): string {
+function buildHtml(data: UsageData | null, error: string | null = null): string {
 	if (!data) {
-		return `<!DOCTYPE html><html><body style="font-family:var(--vscode-font-family);padding:40px;text-align:center;color:var(--vscode-descriptionForeground);background:var(--vscode-editor-background)">
-			<h3>No data yet</h3><p>Fetching usage from Anthropic API…</p>
-		</body></html>`;
+		const body = error
+			? `<h3 style="color:#ff6b6b;margin-bottom:12px">Error</h3><p style="font-family:monospace;font-size:12px;word-break:break-word;color:var(--vscode-foreground)">${error}</p>`
+			: `<h3>No data yet</h3><p>Fetching usage from Anthropic API…</p>`;
+		return `<!DOCTYPE html><html><body style="font-family:var(--vscode-font-family);padding:40px;color:var(--vscode-descriptionForeground);background:var(--vscode-editor-background)">${body}</body></html>`;
 	}
 
 	const eu = data.extraUsage;
@@ -136,9 +137,9 @@ export class UsagePanel {
 
 	constructor(_extensionUri: vscode.Uri) {}
 
-	public show(data: UsageData | null) {
+	public show(data: UsageData | null, error: string | null = null) {
 		if (this.panel) {
-			this.panel.webview.html = buildHtml(data);
+			this.panel.webview.html = buildHtml(data, error);
 			this.panel.reveal(vscode.ViewColumn.One, true);
 			return;
 		}
@@ -148,13 +149,13 @@ export class UsagePanel {
 			{ viewColumn: vscode.ViewColumn.One, preserveFocus: true },
 			{ enableScripts: false, retainContextWhenHidden: false },
 		);
-		this.panel.webview.html = buildHtml(data);
+		this.panel.webview.html = buildHtml(data, error);
 		this.panel.onDidDispose(() => { this.panel = undefined; });
 	}
 
-	public update(data: UsageData) {
+	public update(data: UsageData | null, error: string | null = null) {
 		if (this.panel) {
-			this.panel.webview.html = buildHtml(data);
+			this.panel.webview.html = buildHtml(data, error);
 		}
 	}
 
