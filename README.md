@@ -2,6 +2,8 @@
 
 A VS Code extension that shows your real-time Claude Code quota usage directly in the status bar — powered by the official Anthropic OAuth usage API.
 
+![Full screen overview](https://raw.githubusercontent.com/yahyashareef48/claude-usage-monitor/refs/heads/master/resources/image1.png)
+
 ## How It Works
 
 The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 30 seconds and displays the results without any additional login or configuration.
@@ -14,6 +16,8 @@ The extension authenticates using the OAuth token that Claude Code already store
 - **Zero config** — reads your existing Claude Code credentials automatically
 
 ## Status Bar
+
+![Status bar chip](https://raw.githubusercontent.com/yahyashareef48/claude-usage-monitor/refs/heads/master/resources/image2.png)
 
 ```
 ☁ 69% · 2h 14m
@@ -29,6 +33,8 @@ Colors:
 - Red — > 80%
 
 ## Usage Panel
+
+![Usage detail panel](https://raw.githubusercontent.com/yahyashareef48/claude-usage-monitor/refs/heads/master/resources/image3.png)
 
 Click the status bar item (or run **Claude: Show Usage** from the Command Palette) to open a panel showing:
 
