@@ -38,6 +38,7 @@ export function activate(context: vscode.ExtensionContext) {
 	let currentError: string | null    = null;
 	let errorCount    = 0;
 	let timer: ReturnType<typeof setTimeout> | null = null;
+	let windowFocused = true;
 
 	function applyState(data: UsageData | null, error: string | null) {
 		currentData  = data;
@@ -52,6 +53,8 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	function scheduleNext() {
+		if (!windowFocused) { return; } // don't poll in background
+
 		const delay = errorCount === 0
 			? POLL_INTERVAL_MS
 			: BACKOFF_STEPS_MS[Math.min(errorCount - 1, BACKOFF_STEPS_MS.length - 1)];
@@ -105,6 +108,18 @@ export function activate(context: vscode.ExtensionContext) {
 		refresh().then(() => scheduleNext());
 	}
 
+	const onFocus = vscode.window.onDidChangeWindowState((state) => {
+		windowFocused = state.focused;
+		if (state.focused) {
+			// Window came back into focus — cancel any pending timer and refresh immediately
+			if (timer) { clearTimeout(timer); timer = null; }
+			refresh().then(() => scheduleNext());
+		} else {
+			// Window lost focus — cancel the pending timer
+			if (timer) { clearTimeout(timer); timer = null; }
+		}
+	});
+
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
 		panel.show(currentData, currentError);
 	});
@@ -121,6 +136,7 @@ export function activate(context: vscode.ExtensionContext) {
 		{ dispose: () => { if (timer) { clearTimeout(timer); } } },
 		statusBar,
 		panel,
+		onFocus,
 		showPopup,
 		refreshCmd,
 	);
