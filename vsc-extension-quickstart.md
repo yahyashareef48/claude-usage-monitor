@@ -1,48 +1,69 @@
-# Welcome to your VS Code Extension
+# Development Guide
 
-## What's in the folder
+## Project Structure
 
-* This folder contains all of the files necessary for your extension.
-* `package.json` - this is the manifest file in which you declare your extension and command.
-  * The sample plugin registers a command and defines its title and command name. With this information VS Code can show the command in the command palette. It doesn’t yet need to load the plugin.
-* `src/extension.ts` - this is the main file where you will provide the implementation of your command.
-  * The file exports one function, `activate`, which is called the very first time your extension is activated (in this case by executing the command). Inside the `activate` function we call `registerCommand`.
-  * We pass the function containing the implementation of the command as the second parameter to `registerCommand`.
+```
+src/
+  extension.ts       # Activation, polling loop, command registration
+  usageClient.ts     # Reads ~/.claude/.credentials.json, calls /api/oauth/usage
+  statusBar.ts       # Status bar item (utilization % + time to reset)
+  sessionPopover.ts  # Webview panel with full quota breakdown
+  types.ts           # UsageData, QuotaBucket, ExtraUsage interfaces
+```
 
-## Setup
+## Running Locally
 
-* install the recommended extensions (amodio.tsl-problem-matcher, ms-vscode.extension-test-runner, and dbaeumer.vscode-eslint)
+Press `F5` to launch the Extension Development Host. The extension activates immediately on startup and polls the API every 30 seconds.
 
+To force a refresh during development, run **Claude: Refresh Usage** from the Command Palette.
 
-## Get up and running straight away
+## Building
 
-* Press `F5` to open a new window with your extension loaded.
-* Run your command from the command palette by pressing (`Ctrl+Shift+P` or `Cmd+Shift+P` on Mac) and typing `Hello World`.
-* Set breakpoints in your code inside `src/extension.ts` to debug your extension.
-* Find output from your extension in the debug console.
+```bash
+npm install
+npm run compile     # type-check + lint + bundle
+npm run watch       # incremental rebuild on save
+```
 
-## Make changes
+## Packaging
 
-* You can relaunch the extension from the debug toolbar after changing code in `src/extension.ts`.
-* You can also reload (`Ctrl+R` or `Cmd+R` on Mac) the VS Code window with your extension to load your changes.
+```bash
+npm run package     # production bundle
+vsce package        # outputs .vsix
+```
 
+## API Reference
 
-## Explore the API
+**Endpoint:** `GET https://api.anthropic.com/api/oauth/usage`
 
-* You can open the full set of our API when you open the file `node_modules/@types/vscode/index.d.ts`.
+**Required headers:**
+```
+Authorization: Bearer <accessToken>
+anthropic-beta: oauth-2025-04-20
+```
 
-## Run tests
+**Response shape:**
+```json
+{
+  "five_hour":          { "utilization": 69.0, "resets_at": "ISO8601" },
+  "seven_day":          { "utilization": 11.0, "resets_at": "ISO8601" },
+  "seven_day_sonnet":   null,
+  "seven_day_opus":     null,
+  "seven_day_oauth_apps": null,
+  "extra_usage": {
+    "is_enabled": true,
+    "used_credits": 3336.0,
+    "monthly_limit": null,
+    "utilization": null,
+    "currency": "USD"
+  }
+}
+```
 
-* Install the [Extension Test Runner](https://marketplace.visualstudio.com/items?itemName=ms-vscode.extension-test-runner)
-* Run the "watch" task via the **Tasks: Run Task** command. Make sure this is running, or tests might not be discovered.
-* Open the Testing view from the activity bar and click the Run Test" button, or use the hotkey `Ctrl/Cmd + ; A`
-* See the output of the test result in the Test Results view.
-* Make changes to `src/test/extension.test.ts` or create new test files inside the `test` folder.
-  * The provided test runner will only consider files matching the name pattern `**.test.ts`.
-  * You can create folders inside the `test` folder to structure your tests any way you want.
+`utilization` is a percentage (0–100), not a fraction.
 
-## Go further
+## Credentials Location
 
-* Reduce the extension size and improve the startup time by [bundling your extension](https://code.visualstudio.com/api/working-with-extensions/bundling-extension).
-* [Publish your extension](https://code.visualstudio.com/api/working-with-extensions/publishing-extension) on the VS Code extension marketplace.
-* Automate builds by setting up [Continuous Integration](https://code.visualstudio.com/api/working-with-extensions/continuous-integration).
+Mirrors Claude Code's own resolution:
+1. `$CLAUDE_CONFIG_DIR/.credentials.json`
+2. `~/.claude/.credentials.json`

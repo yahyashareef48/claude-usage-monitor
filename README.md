@@ -1,225 +1,69 @@
 # Claude Code Usage Monitor
 
-A VS Code extension that provides real-time monitoring of Claude Code token usage, cost tracking, and session management.
-
-![Visual Studio Marketplace Version](https://img.shields.io/visual-studio-marketplace/v/claude-usage-monitor)
-![Visual Studio Marketplace Installs](https://img.shields.io/visual-studio-marketplace/i/claude-usage-monitor)
-
-## Overview
-
-Monitor your Claude Code usage directly in VS Code. This extension reads local conversation data and displays real-time metrics including token consumption, costs, burn rate predictions, and session timing - helping you stay within your plan limits and avoid unexpected interruptions.
-
-## Features
-
-### 📊 Real-Time Token Tracking
-- **Input tokens** - Tokens sent in your prompts
-- **Output tokens** - Tokens in Claude's responses
-- **Cache tokens** - Separate tracking for cache creation and reads
-- **Live updates** - Automatic refresh as you use Claude Code
-
-### 💰 Cost Calculations
-- Track spending per session with model-specific pricing
-- Support for Pro, Max5, Max20, and Custom plans
-- Historical cost analysis
-
-### ⏱️ Session Management
-- **5-hour rolling windows** - Matches Claude Code's session limits exactly
-- **Session timer** - See when your current session started and when it will reset
-- **Time remaining** - Know how much time you have left
-- **End time display** - Status bar shows when session expires
-
-### 🔥 Burn Rate Predictions
-- Real-time tokens-per-minute consumption
-- Predict when you'll hit your limit
-- Adjust usage before reaching thresholds
-
-### 🎨 Visual Indicators
-- **Color-coded status bar**
-  - 🟢 Green: < 60% of limit
-  - 🟡 Yellow: 60-80% of limit
-  - 🔴 Red: > 80% of limit
-- **Quick popover** - Click status bar for instant details
-- **Smart warnings** - Alerts at 80% and 100% thresholds
-
-## Installation
-
-1. Install from VS Code Marketplace (coming soon)
-2. Or install manually:
-   ```bash
-   code --install-extension claude-usage-monitor-0.0.1.vsix
-   ```
-
-## Usage
-
-### Status Bar
-
-The extension displays a compact status in the bottom-right corner:
-
-```
-🔥 3h 45m - 28.1%
-```
-
-Shows:
-- 🔥 Icon indicating monitoring is active
-- **3h 45m** - Time remaining until session expires
-- **28.1%** - Percentage of your token limit used
-
-**Click the status bar** to open a quick popover with detailed metrics.
-
-### Quick Popover
-
-Click the status bar icon to see:
-- Session timing (start, end, remaining)
-- Token usage breakdown
-- Burn rate and predictions
-- Current plan limits
-
-## Configuration
-
-### Plan Settings
-
-Configure your Claude Code plan in VS Code settings:
-
-```json
-{
-  "claudeMonitor.plan": "pro",  // Options: "pro", "max5", "max20", "custom"
-  "claudeMonitor.customLimitTokens": 50000,  // For custom plan
-  "claudeMonitor.refreshInterval": 5  // Update interval in seconds
-}
-```
-
-### Plan Limits
-
-| Plan | Token Limit |
-|------|-------------|
-| **Pro** | 44,000 |
-| **Max5** | 88,000 |
-| **Max20** | 220,000 |
-| **Custom** | User-defined |
-
-### Custom Plan
-
-Set a personalized token limit based on your usage patterns:
-
-```json
-{
-  "claudeMonitor.plan": "custom",
-  "claudeMonitor.customLimitTokens": 60000
-}
-```
-
-### Data Path Override
-
-Override Claude's data directories if needed:
-
-```json
-{
-  "claudeMonitor.dataPaths": [
-    "/custom/path/to/claude/projects"
-  ]
-}
-```
-
-Or set the `CLAUDE_CONFIG_DIR` environment variable.
+A VS Code extension that shows your real-time Claude Code quota usage directly in the status bar — powered by the official Anthropic OAuth usage API.
 
 ## How It Works
 
-### Data Source
+The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 30 seconds and displays the results without any additional login or configuration.
 
-Claude Code stores conversation data locally in JSONL files:
-- **Windows**: `%USERPROFILE%\.claude\projects\`
-- **macOS/Linux**: `~/.claude/projects/` or `~/.config/claude/projects/`
+## Features
 
-The extension monitors these files for changes and calculates metrics in real-time.
+- **Status bar** — shows your 5-hour window utilization % and time until reset, color-coded green/yellow/red
+- **Usage panel** — click the status bar to open a full panel with progress bars for every active quota window
+- **Extra usage** — displays pay-as-you-go credit spend if enabled on your account
+- **Zero config** — reads your existing Claude Code credentials automatically
 
-### Session Windows
+## Status Bar
 
-Claude Code enforces **5-hour rolling sessions**. The extension:
-1. Detects your first message timestamp
-2. Calculates session expiry (exactly 5 hours later)
-3. Tracks token usage within the active window
-4. Resets when the session expires
+```
+☁ 69% · 2h 14m
+```
 
-### Token Calculation
+- **69%** — percentage of your 5-hour quota used
+- **2h 14m** — time until the 5-hour window resets
+- Hover for a tooltip with all active quota windows
 
-**What counts toward your limit:**
-- ✅ `input_tokens` - Your prompts
-- ✅ `output_tokens` - Claude's responses
+Colors:
+- Green — < 60%
+- Yellow — 60–80%
+- Red — > 80%
 
-**What doesn't count:**
-- ❌ `cache_creation_input_tokens` - Cache overhead
-- ❌ `cache_read_input_tokens` - Cache hits
+## Usage Panel
 
-This matches Claude Code's official limit calculation.
+Click the status bar item (or run **Claude: Show Usage** from the Command Palette) to open a panel showing:
 
-### Privacy
-
-All data processing happens **locally on your machine**:
-- ✅ No data sent to external servers
-- ✅ No telemetry or analytics
-- ✅ No account required
-- ✅ Reads only your local Claude files
-
-## Requirements
-
-- **VS Code**: 1.85.0 or higher
-- **Claude Code**: Active installation with local conversation data
-- **Node.js**: Only for development
-
-## Known Issues
-
-- File watching may have a brief delay (~1-5 seconds) on some systems
-- Multiple concurrent sessions are aggregated globally (matches Claude's behavior)
+- **5-Hour Window** — your primary rolling quota with a progress bar and reset time
+- **7-Day Window** — weekly quota utilization
+- **7-Day Sonnet / Opus** — model-specific weekly quotas (when applicable)
+- **Extra Usage** — pay-as-you-go credits spent this month (when enabled)
 
 ## Commands
 
-Access these via the Command Palette (`Ctrl+Shift+P` / `Cmd+Shift+P`):
+| Command | Description |
+|---------|-------------|
+| `Claude: Show Usage` | Open the usage panel |
+| `Claude: Refresh Usage` | Force an immediate API poll |
 
-- `Claude Monitor: Show Details` - Open detailed metrics popover
-- `Claude Monitor: Refresh` - Force refresh metrics
+## Requirements
 
-## Development
+- VS Code 1.104.0 or higher
+- Claude Code installed and logged in (so `~/.claude/.credentials.json` exists)
+- Internet connection (to reach `api.anthropic.com`)
 
-### Building
+## Data Source
 
-```bash
-npm install
-npm run compile
-```
+All data comes from the Anthropic API — the same source Claude Code itself uses for its internal quota display. No local JSONL parsing or file watching is involved.
 
-### Packaging
+The credentials file path follows Claude Code's own resolution logic:
+1. `$CLAUDE_CONFIG_DIR/.credentials.json` if the env var is set
+2. `~/.claude/.credentials.json` otherwise
 
-```bash
-npm run package  # Compile and lint
-vsce package     # Create .vsix
-```
+## Privacy
 
-### Testing
-
-```bash
-npm run test
-```
-
-### Contributing
-
-Contributions welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Submit a pull request
-
-## Credits
-
-Inspired by [maciek-roboblog/claude-code-usage-monitor](https://github.com/maciek-roboblog/claude-code-usage-monitor) - the original Python terminal-based monitor.
-
-## Support
-
-- **Issues**: [GitHub Issues](https://github.com/yahya/claude-usage-monitor/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yahya/claude-usage-monitor/discussions)
+- No data is collected or sent anywhere other than `api.anthropic.com`
+- The OAuth token is read from disk and used only for the usage API call
+- No telemetry
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) file for details.
-
----
-
-**Enjoy coding with Claude!** 🚀
+MIT
