@@ -73,6 +73,11 @@ async function setOrgId(id) {
 }
 
 async function fetchAndStore() {
+  // Always read from storage — in-memory orgId is lost when service worker goes idle
+  if (!orgId) {
+    const stored = await chrome.storage.session.get('orgId');
+    orgId = stored.orgId ?? null;
+  }
   if (!orgId) return;
 
   try {

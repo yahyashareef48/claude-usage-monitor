@@ -3,13 +3,24 @@
 
 const WIDGET_ID = 'claude-usage-monitor-widget';
 const TARGET_SELECTOR = '.relative.flex.w-full.items-center.p-2.pointer-events-auto.pt-2';
+const COLLAPSED_KEY = 'cum_collapsed';
+
+// Inline SVG logo — viewBox tightly crops the visible paths (y:175–387, x:100–452 + stroke overflow)
+// so it centers properly at any size without vertical offset
+const LOGO_SVG = `<svg class="cum-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="75 150 402 237" aria-hidden="true">
+  <path d="M 250 200 A 100 100 0 1 0 250 362" stroke="#C15F3C" stroke-width="50" fill="none" stroke-linecap="round"/>
+  <path d="M 402 200 A 100 100 0 1 0 402 362" stroke="#C15F3C" stroke-width="50" fill="none" stroke-linecap="round"/>
+</svg>`;
 
 let currentData = null;
+let fetchedAt = null;
+let isCollapsed = sessionStorage.getItem(COLLAPSED_KEY) === 'true';
 
 // Request cached data from background on load
 chrome.runtime.sendMessage({ type: 'GET_USAGE' }, (response) => {
   if (response?.usageData) {
     currentData = response.usageData;
+    fetchedAt = response.fetchedAt ?? null;
     tryInjectWidget();
   }
 });
@@ -18,9 +29,10 @@ chrome.runtime.sendMessage({ type: 'GET_USAGE' }, (response) => {
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'USAGE_UPDATED') {
     currentData = message.usageData;
+    fetchedAt = Date.now();
     const existing = document.getElementById(WIDGET_ID);
     if (existing) {
-      updateWidget(existing, currentData);
+      rerenderWidget(existing);
     } else {
       tryInjectWidget();
     }
@@ -33,63 +45,84 @@ const observer = new MutationObserver(() => {
     tryInjectWidget();
   }
 });
-
 observer.observe(document.body, { childList: true, subtree: true });
 
 function tryInjectWidget() {
   if (!currentData) return;
-
   const target = document.querySelector(TARGET_SELECTOR);
   if (!target) return;
-
-  // Don't inject twice
   if (document.getElementById(WIDGET_ID)) return;
 
-  const widget = buildWidget(currentData);
+  const widget = document.createElement('div');
+  widget.id = WIDGET_ID;
+  rerenderWidget(widget);
   target.insertAdjacentElement('afterend', widget);
 }
 
-function buildWidget(data) {
-  const el = document.createElement('div');
-  el.id = WIDGET_ID;
-  el.innerHTML = renderWidget(data);
-  return el;
+function rerenderWidget(el) {
+  el.innerHTML = renderWidget(currentData, fetchedAt, isCollapsed);
+
+  const heading = el.querySelector('.cum-heading');
+  if (heading) {
+    heading.addEventListener('click', () => {
+      isCollapsed = !isCollapsed;
+      sessionStorage.setItem(COLLAPSED_KEY, isCollapsed);
+      rerenderWidget(el);
+    });
+  }
 }
 
-function updateWidget(el, data) {
-  el.innerHTML = renderWidget(data);
-}
+function renderWidget(data, ts, collapsed) {
+  const chevron = collapsed ? '▸' : '▾';
 
-function renderWidget(data) {
+  if (collapsed) {
+    const fh = data?.fiveHour;
+    const pct = fh ? Math.round(fh.utilization) : null;
+    const color = pct != null ? utilizationColor(pct) : '';
+    const timeLeft = fh?.resetsAt ? formatTimeRemaining(fh.resetsAt) : null;
+
+    const pctHtml = pct != null
+      ? `<span class="cum-inline-summary" style="color:${color}">${pct}%</span>`
+      : '';
+    const resetHtml = timeLeft
+      ? `<span class="cum-inline-reset">${timeLeft}</span>`
+      : '';
+
+    return `
+      <div class="cum-heading cum-clickable">
+        ${LOGO_SVG}
+        <span class="cum-title">Plan Usage Limits</span>
+        ${pctHtml}
+        ${resetHtml}
+        <span class="cum-chevron">${chevron}</span>
+      </div>
+    `;
+  }
+
+  // Expanded
   const rows = [];
+  if (data?.fiveHour) rows.push(bucketRow('5-hour', data.fiveHour));
+  if (data?.sevenDay) rows.push(bucketRow('7-day', data.sevenDay));
+  if (data?.sevenDaySonnet) rows.push(bucketRow('7-day Sonnet', data.sevenDaySonnet));
+  if (data?.sevenDayOpus) rows.push(bucketRow('7-day Opus', data.sevenDayOpus));
+  if (data?.extraUsage?.isEnabled) rows.push(creditsRow(data.extraUsage));
 
-  if (data.fiveHour) {
-    rows.push(bucketRow('5-hour', data.fiveHour));
-  }
-  if (data.sevenDay) {
-    rows.push(bucketRow('7-day', data.sevenDay));
-  }
-  if (data.sevenDaySonnet) {
-    rows.push(bucketRow('7-day Sonnet', data.sevenDaySonnet));
-  }
-  if (data.sevenDayOpus) {
-    rows.push(bucketRow('7-day Opus', data.sevenDayOpus));
-  }
-  if (data.extraUsage?.isEnabled) {
-    rows.push(creditsRow(data.extraUsage));
-  }
+  const rowsHtml = rows.length > 0
+    ? `<div class="cum-rows">${rows.join('')}</div>`
+    : '<div class="cum-no-data">No usage data available</div>';
 
-  if (rows.length === 0) {
-    return '<div class="cum-no-data">No usage data available</div>';
-  }
+  const footerHtml = ts
+    ? `<div class="cum-footer">Updated ${timeAgo(ts)}</div>`
+    : '';
 
-  const iconUrl = chrome.runtime.getURL('icons/icon48.png');
   return `
-    <div class="cum-heading">
-      <img class="cum-icon" src="${iconUrl}" alt="">
-      Plan Usage Limits
+    <div class="cum-heading cum-clickable">
+      ${LOGO_SVG}
+      <span class="cum-title">Plan Usage Limits</span>
+      <span class="cum-chevron">${chevron}</span>
     </div>
-    <div class="cum-rows">${rows.join('')}</div>
+    ${rowsHtml}
+    ${footerHtml}
   `;
 }
 
@@ -135,9 +168,9 @@ function creditsRow(extra) {
 }
 
 function utilizationColor(pct) {
-  if (pct >= 80) return '#ff6b6b';
-  if (pct >= 60) return '#ffd93d';
-  return '#6bcb77';
+  if (pct >= 80) return '#e05c3a';
+  if (pct >= 60) return '#d4a017';
+  return '#2e9e52';
 }
 
 function formatTimeRemaining(resetsAt) {
@@ -147,4 +180,13 @@ function formatTimeRemaining(resetsAt) {
   const m = Math.floor((diff % 3_600_000) / 60_000);
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'just now';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m ago`;
+  return `${Math.floor(m / 60)}h ago`;
 }
