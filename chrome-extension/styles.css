@@ -46,10 +46,37 @@
   flex: 1;
 }
 
+#claude-usage-monitor-widget .cum-reload {
+  background: none !important;
+  border: none !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  cursor: pointer !important;
+  font-size: 11px !important;
+  line-height: 1 !important;
+  color: var(--text-500, rgba(0,0,0,0.25)) !important;
+  opacity: 0.7;
+  transition: opacity 0.15s, transform 0.3s !important;
+  flex-shrink: 0;
+}
+
+#claude-usage-monitor-widget .cum-reload:hover {
+  opacity: 1 !important;
+}
+
+#claude-usage-monitor-widget .cum-reload.cum-reload-spinning {
+  animation: cum-spin 0.7s linear infinite !important;
+  opacity: 0.8 !important;
+}
+
+@keyframes cum-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
 #claude-usage-monitor-widget .cum-chevron {
   font-size: 10px;
   opacity: 0.4;
-  margin-left: auto;
   flex-shrink: 0;
 }
 
@@ -126,10 +153,13 @@
 }
 
 #claude-usage-monitor-widget .cum-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px;
   margin-top: 6px;
   font-size: 10px;
   color: var(--text-500, rgba(0, 0, 0, 0.25));
-  text-align: right;
 }
 
 #claude-usage-monitor-widget .cum-no-data {

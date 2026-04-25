@@ -157,12 +157,16 @@ function parseExtraUsage(raw) {
   };
 }
 
-// Handle GET_USAGE requests from content scripts / popup
+// Handle messages from content scripts / popup
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'GET_USAGE') {
     chrome.storage.session.get(['usageData', 'fetchedAt', 'orgId']).then((data) => {
       sendResponse(data);
     });
-    return true; // Keep channel open for async response
+    return true;
+  }
+  if (message.type === 'FORCE_REFRESH') {
+    fetchAndStore().then(() => sendResponse({ ok: true }));
+    return true;
   }
 });

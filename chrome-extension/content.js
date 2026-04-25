@@ -64,10 +64,21 @@ function rerenderWidget(el) {
 
   const heading = el.querySelector('.cum-heading');
   if (heading) {
-    heading.addEventListener('click', () => {
+    heading.addEventListener('click', (e) => {
+      // Don't collapse when clicking the reload button
+      if (e.target.classList.contains('cum-reload')) return;
       isCollapsed = !isCollapsed;
       sessionStorage.setItem(COLLAPSED_KEY, isCollapsed);
       rerenderWidget(el);
+    });
+  }
+
+  const reloadBtn = el.querySelector('.cum-reload');
+  if (reloadBtn) {
+    reloadBtn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      reloadBtn.classList.add('cum-reload-spinning');
+      chrome.runtime.sendMessage({ type: 'FORCE_REFRESH' }, () => {});
     });
   }
 }
@@ -111,9 +122,7 @@ function renderWidget(data, ts, collapsed) {
     ? `<div class="cum-rows">${rows.join('')}</div>`
     : '<div class="cum-no-data">No usage data available</div>';
 
-  const footerHtml = ts
-    ? `<div class="cum-footer">Updated ${timeAgo(ts)}</div>`
-    : '';
+  const footerHtml = `<div class="cum-footer">${ts ? `Updated ${timeAgo(ts)}` : ''}<button class="cum-reload" title="Refresh">↻</button></div>`;
 
   return `
     <div class="cum-heading cum-clickable">
