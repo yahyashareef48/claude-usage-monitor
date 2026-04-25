@@ -34,7 +34,9 @@ function readTokenFromKeychain(): string | null {
 			{ timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] },
 		).toString().trim();
 		const parsed = JSON.parse(json);
-		return parsed?.claudeAiOauth?.accessToken ?? parsed?.accessToken ?? null;
+		// Keychain output: { accessToken, refreshToken, expiresAt }
+		// Fallback: older format { claudeAiOauth: { accessToken } }
+		return parsed?.accessToken ?? parsed?.claudeAiOauth?.accessToken ?? null;
 	} catch {
 		return null;
 	}
