@@ -2,6 +2,7 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as https from 'https';
+import { execSync } from 'child_process';
 import { UsageData } from './types';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
@@ -25,15 +26,31 @@ function getClaudeConfigDir(): string {
 	return path.join(os.homedir(), '.claude');
 }
 
+function readTokenFromKeychain(): string | null {
+	if (process.platform !== 'darwin') { return null; }
+	try {
+		const json = execSync(
+			"security find-generic-password -s 'Claude Code-credentials' -w",
+			{ timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] },
+		).toString().trim();
+		const parsed = JSON.parse(json);
+		return parsed?.claudeAiOauth?.accessToken ?? parsed?.accessToken ?? null;
+	} catch {
+		return null;
+	}
+}
+
 function readAccessToken(): string | null {
 	const credPath = path.join(getClaudeConfigDir(), '.credentials.json');
 	try {
 		const raw = fs.readFileSync(credPath, 'utf-8');
 		const creds: Credentials = JSON.parse(raw);
-		return creds.claudeAiOauth?.accessToken ?? null;
-	} catch {
-		return null;
-	}
+		const token = creds.claudeAiOauth?.accessToken ?? null;
+		if (token) { return token; }
+	} catch { /* file missing or unreadable */ }
+
+	// Fallback: macOS Keychain (Claude Code stores creds here on newer versions)
+	return readTokenFromKeychain();
 }
 
 function httpsGet(url: string, headers: Record<string, string>): Promise<string> {
@@ -64,7 +81,9 @@ function parseQuotaBucket(raw: { utilization: number; resets_at: string } | null
 export async function fetchUsageData(): Promise<UsageData> {
 	const token = readAccessToken();
 	if (!token) {
-		throw new Error(`No OAuth token found. Looked in: ${path.join(getClaudeConfigDir(), '.credentials.json')}`);
+		const credPath = path.join(getClaudeConfigDir(), '.credentials.json');
+		const macNote = process.platform === 'darwin' ? ' and macOS Keychain (Claude Code-credentials)' : '';
+		throw new Error(`No OAuth token found. Looked in: ${credPath}${macNote}. Make sure you are logged in to Claude Code.`);
 	}
 
 	const body = await httpsGet(USAGE_URL, {
