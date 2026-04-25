@@ -1,0 +1,85 @@
+/* Claude Usage Monitor - Sidebar Widget Styles */
+
+#claude-usage-monitor-widget {
+  border-top: 1px solid rgba(255, 255, 255, 0.1);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 8px 12px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.4;
+  color: rgba(255, 255, 255, 0.7);
+}
+
+#claude-usage-monitor-widget .cum-heading {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: rgba(255, 255, 255, 0.4);
+  margin-bottom: 6px;
+}
+
+#claude-usage-monitor-widget .cum-icon {
+  width: 13px;
+  height: 13px;
+  opacity: 0.6;
+}
+
+#claude-usage-monitor-widget .cum-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+#claude-usage-monitor-widget .cum-row {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+#claude-usage-monitor-widget .cum-row-header {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+#claude-usage-monitor-widget .cum-label {
+  flex: 1;
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 11px;
+}
+
+#claude-usage-monitor-widget .cum-pct {
+  font-size: 11px;
+  font-weight: 600;
+  min-width: 28px;
+  text-align: right;
+}
+
+#claude-usage-monitor-widget .cum-reset {
+  font-size: 10px;
+  color: rgba(255, 255, 255, 0.35);
+  white-space: nowrap;
+}
+
+#claude-usage-monitor-widget .cum-bar-track {
+  height: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+#claude-usage-monitor-widget .cum-bar-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.4s ease;
+}
+
+#claude-usage-monitor-widget .cum-no-data {
+  color: rgba(255, 255, 255, 0.3);
+  font-size: 11px;
+  font-style: italic;
+}
