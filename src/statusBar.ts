@@ -1,6 +1,14 @@
 import * as vscode from 'vscode';
 import { UsageData } from './types';
 
+function timeAgo(date: Date): string {
+	const sec = Math.floor((Date.now() - date.getTime()) / 1000);
+	if (sec < 60) { return 'just now'; }
+	if (sec < 3600) { const m = Math.floor(sec / 60); return `${m} minute${m === 1 ? '' : 's'} ago`; }
+	const h = Math.floor(sec / 3600);
+	return `${h} hour${h === 1 ? '' : 's'} ago`;
+}
+
 function formatTimeRemaining(resetsAt: string): string {
 	const ms = new Date(resetsAt).getTime() - Date.now();
 	if (ms <= 0) { return 'resetting'; }
@@ -50,7 +58,7 @@ export class StatusBarManager {
 		const bar = (p: number) => {
 			const filled = Math.round(Math.min(p, 100) / 10);
 			const color  = p >= 80 ? '🔴' : p >= 60 ? '🟡' : '🟢';
-			return `${'█'.repeat(filled)}${'░'.repeat(10 - filled)} ${p.toFixed(0)}%  ${color}`;
+			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${p.toFixed(0)}% ${color}`;
 		};
 
 		const lines: string[] = [
@@ -86,7 +94,7 @@ export class StatusBarManager {
 			lines.push(`\n⚠️ *Poll failed — showing cached data*`);
 		}
 
-		lines.push(`\n---\n_Updated ${data.fetchedAt.toLocaleTimeString()} · Click to open panel_`);
+		lines.push(`\n---\n_Updated ${timeAgo(data.fetchedAt)} · Click to open panel_`);
 
 		const md = new vscode.MarkdownString(lines.join('\n\n'));
 		md.supportThemeIcons = true;

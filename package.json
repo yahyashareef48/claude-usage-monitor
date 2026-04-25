@@ -2,7 +2,7 @@
   "name": "claude-code-usage-tracker",
   "displayName": "Claude Code Usage Tracker",
   "description": "Real-time monitoring of Claude Code token usage, cost tracking, and session management",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "publisher": "YahyaShareef",
   "icon": "resources/icon.png",
   "repository": {
@@ -40,7 +40,11 @@
       "properties": {
         "claude-usage-monitor.clockFormat": {
           "type": "string",
-          "enum": ["auto", "12h", "24h"],
+          "enum": [
+            "auto",
+            "12h",
+            "24h"
+          ],
           "enumDescriptions": [
             "Use the system locale default",
             "Force 12-hour clock (e.g. 7:44 PM)",
