@@ -50,11 +50,23 @@ function barColor(pct: number): string {
   return "#51cf66";
 }
 
+function formatResetDate(iso: string): string {
+  const d = new Date(iso);
+  const fmt = vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('clockFormat', 'auto');
+  if (fmt === '24h') {
+    return d.toLocaleString(undefined, { hour12: false });
+  }
+  if (fmt === '12h') {
+    return d.toLocaleString(undefined, { hour12: true });
+  }
+  return d.toLocaleString(); // auto — system locale decides
+}
+
 function bucketRow(label: string, bucket: QuotaBucket): string {
   const pct = bucket.utilization;
   const color = barColor(pct);
   const timeLeft = formatTimeRemaining(bucket.resetsAt);
-  const resetsDate = new Date(bucket.resetsAt).toLocaleString();
+  const resetsDate = formatResetDate(bucket.resetsAt);
   return `
 		<div class="bucket">
 			<div class="bucket-header">

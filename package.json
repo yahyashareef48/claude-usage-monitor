@@ -35,6 +35,22 @@
         "title": "Claude: Refresh Usage"
       }
     ],
+    "configuration": {
+      "title": "Claude Usage Monitor",
+      "properties": {
+        "claude-usage-monitor.clockFormat": {
+          "type": "string",
+          "enum": ["auto", "12h", "24h"],
+          "enumDescriptions": [
+            "Use the system locale default",
+            "Force 12-hour clock (e.g. 7:44 PM)",
+            "Force 24-hour clock (e.g. 19:44)"
+          ],
+          "default": "auto",
+          "description": "Clock format for reset times in the usage panel."
+        }
+      }
+    },
     "icons": {
       "claude-icon": {
         "description": "Claude AI icon",
