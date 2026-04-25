@@ -25,6 +25,21 @@ function formatTimeRemaining(resetsAt: string): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
+function formatError(raw: string): string {
+  const jsonMatch = raw.match(/\{[\s\S]*\}/);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const inner = parsed?.error;
+      if (inner?.message) {
+        const prefix = raw.match(/^HTTP \d+/)?.[0];
+        return prefix ? `${prefix} — ${inner.message}` : inner.message;
+      }
+    } catch { /* fall through */ }
+  }
+  return raw;
+}
+
 function barColor(pct: number): string {
   if (pct >= 80) {
     return "#ff6b6b";
@@ -57,7 +72,7 @@ function bucketRow(label: string, bucket: QuotaBucket): string {
 function buildHtml(data: UsageData | null, error: string | null = null): string {
   if (!data) {
     const body = error
-      ? `<h3 style="color:#ff6b6b;margin-bottom:12px">Error</h3><p style="font-family:monospace;font-size:12px;word-break:break-word;color:var(--vscode-foreground)">${error}</p>`
+      ? `<h3 style="color:#ff6b6b;margin-bottom:12px">Error</h3><p style="font-size:12px;color:var(--vscode-foreground)">${formatError(error)}</p>`
       : `<h3>No data yet</h3><p>Fetching usage from Anthropic API…</p>`;
     return `<!DOCTYPE html><html><body style="font-family:var(--vscode-font-family);padding:40px;color:var(--vscode-descriptionForeground);background:var(--vscode-editor-background)">${body}</body></html>`;
   }
@@ -164,7 +179,7 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 <body>
 <h1>Claude Usage</h1>
 <div class="subtitle">Updated ${timeAgo(data.fetchedAt)} · <span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span></div>
-${error ? `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8;font-family:monospace">${error}</span></div>` : ''}
+${error ? `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8">${formatError(error)}</span></div>` : ''}
 <div class="section">
 	<div class="section-title">Quota Windows</div>
 	${buckets.length > 0 ? buckets.join("") : '<div class="no-quota">No active quota windows returned.</div>'}
