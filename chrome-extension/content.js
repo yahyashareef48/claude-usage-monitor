@@ -5,6 +5,214 @@ const WIDGET_ID = 'claude-usage-monitor-widget';
 const TARGET_SELECTOR = '.relative.flex.w-full.items-center.p-2.pointer-events-auto.pt-2';
 const COLLAPSED_KEY = 'cum_collapsed';
 
+// ── Recents Filter ──────────────────────────────────────────────────────────
+const FILTER_BTN_ID = 'cum-filter-btn';
+const FILTER_DROPDOWN_ID = 'cum-filter-dropdown';
+const FILTER_KEY = 'cum_filter';
+
+// activeFilter: 'all' | 'none' | project-uuid string
+let activeFilter = sessionStorage.getItem(FILTER_KEY) || 'all';
+let projectsList = []; // { uuid, name }[]
+let dropdownOpen = false;
+
+function findRecentsHeading() {
+  for (const el of document.querySelectorAll('h2')) {
+    if (el.textContent.trim().startsWith('Recents')) return el;
+  }
+  return null;
+}
+
+function filterLabel() {
+  if (activeFilter === 'all') return 'All';
+  if (activeFilter === 'none') return 'No Project';
+  const p = projectsList.find(p => p.uuid === activeFilter);
+  return p ? p.name : 'All';
+}
+
+function tryInjectFilter() {
+  if (document.getElementById(FILTER_BTN_ID)) return;
+  const heading = findRecentsHeading();
+  if (!heading) return;
+
+  // Inject a small filter button inside the h2 flex row (before the Hide span)
+  const btn = document.createElement('button');
+  btn.id = FILTER_BTN_ID;
+  btn.className = 'cum-filter-btn';
+  btn.textContent = filterLabel();
+  // Insert into the outer flex div (heading's parent), not inside the h2
+  const outerFlex = heading.parentElement;
+  if (outerFlex) {
+    outerFlex.appendChild(btn);
+  } else {
+    heading.appendChild(btn);
+  }
+
+  btn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    toggleDropdown(btn);
+  });
+
+  // Close dropdown on outside click
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest(`#${FILTER_DROPDOWN_ID}`) && e.target.id !== FILTER_BTN_ID) {
+      closeDropdown();
+    }
+  }, true);
+
+  // Fetch projects lazily
+  chrome.runtime.sendMessage({ type: 'GET_PROJECTS' }, (res) => {
+    if (res?.projects) {
+      projectsList = res.projects;
+      // Re-render dropdown if open
+      const dd = document.getElementById(FILTER_DROPDOWN_ID);
+      if (dd) renderDropdownContent(dd);
+    }
+  });
+
+  applyFilter(activeFilter);
+}
+
+function toggleDropdown(btn) {
+  if (dropdownOpen) {
+    closeDropdown();
+    return;
+  }
+  openDropdown(btn);
+}
+
+function openDropdown(btn) {
+  closeDropdown();
+  dropdownOpen = true;
+
+  const dd = document.createElement('div');
+  dd.id = FILTER_DROPDOWN_ID;
+  dd.className = 'cum-filter-dropdown';
+  renderDropdownContent(dd);
+
+  // Detect claude.ai theme and pass it to the dropdown
+  const isLight = document.documentElement.classList.contains('light')
+    || document.body.classList.contains('light')
+    || document.documentElement.getAttribute('data-theme') === 'light'
+    || getComputedStyle(document.documentElement).getPropertyValue('--bg-100').trim().startsWith('#f');
+  dd.dataset.cumTheme = isLight ? 'light' : 'dark';
+
+  // Attach to body as fixed, right-aligned to the outer container
+  document.body.appendChild(dd);
+  const heading = findRecentsHeading();
+  const outerDiv = heading?.parentElement;
+  const containerRect = (outerDiv ?? btn).getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+
+  dd.style.position = 'fixed';
+  dd.style.top = `${btnRect.bottom + 4}px`;
+  dd.style.left = 'auto';
+  dd.style.right = `${window.innerWidth - containerRect.right}px`;
+  dd.style.width = '250px';
+}
+
+function renderDropdownContent(dd) {
+  const allOptions = [
+    { key: 'all', label: 'All chats' },
+    { key: 'none', label: 'No project' },
+    ...projectsList.map(p => ({ key: p.uuid, label: p.name })),
+  ];
+
+  const showSearch = projectsList.length > 5;
+
+  dd.innerHTML = `
+    <div class="cum-dd-header">Filter by</div>
+    ${showSearch ? `<div class="cum-dd-search"><input type="text" placeholder="Search projects…" autocomplete="off"></div>` : ''}
+    <div class="cum-dd-scroll">
+      ${renderItems(allOptions)}
+    </div>
+  `;
+
+  if (showSearch) {
+    const input = dd.querySelector('.cum-dd-search input');
+    input.addEventListener('input', () => {
+      const q = input.value.toLowerCase();
+      const scroll = dd.querySelector('.cum-dd-scroll');
+      const filtered = allOptions.filter(o =>
+        o.key === 'all' || o.key === 'none' || o.label.toLowerCase().includes(q)
+      );
+      scroll.innerHTML = renderItems(filtered);
+      attachItemListeners(scroll);
+    });
+    // Prevent outside-click handler from closing on input click
+    input.addEventListener('click', e => e.stopPropagation());
+  }
+
+  attachItemListeners(dd.querySelector('.cum-dd-scroll'));
+}
+
+function renderItems(options) {
+  return options.map(o => `
+    <button class="cum-dd-item${o.key === activeFilter ? ' cum-dd-item-active' : ''}" data-key="${o.key}">
+      ${o.key === activeFilter ? '<span class="cum-dd-check">✓</span>' : '<span class="cum-dd-check"></span>'}
+      <span class="cum-dd-label">${o.label}</span>
+    </button>
+  `).join('');
+}
+
+function attachItemListeners(container) {
+  container.querySelectorAll('.cum-dd-item').forEach(item => {
+    item.addEventListener('click', (e) => {
+      e.stopPropagation();
+      activeFilter = item.dataset.key;
+      sessionStorage.setItem(FILTER_KEY, activeFilter);
+      const btn = document.getElementById(FILTER_BTN_ID);
+      if (btn) btn.textContent = filterLabel();
+      closeDropdown();
+      applyFilter(activeFilter);
+    });
+  });
+}
+
+function closeDropdown() {
+  const dd = document.getElementById(FILTER_DROPDOWN_ID);
+  if (dd) dd.remove();
+  dropdownOpen = false;
+}
+
+function getConversationItems() {
+  const heading = findRecentsHeading();
+  if (!heading) return [];
+  const container = heading.closest('div, nav, section')?.querySelector('ol, ul')
+    ?? heading.parentElement?.parentElement;
+  if (!container) return [];
+  return Array.from(container.querySelectorAll('a[href]'));
+}
+
+function applyFilter(filter) {
+  const items = getConversationItems();
+  items.forEach(item => {
+    const href = item.getAttribute('href') || '';
+    // Extract project uuid from href like /project/{uuid}/chat/{id} or /project/{uuid}
+    const projectMatch = href.match(/\/project\/([a-f0-9-]{36})/);
+    const itemProjectId = projectMatch ? projectMatch[1] : null;
+
+    let show = true;
+    if (filter === 'all') {
+      show = true;
+    } else if (filter === 'none') {
+      show = itemProjectId === null;
+    } else {
+      // Specific project uuid
+      show = itemProjectId === filter;
+    }
+    item.style.display = show ? '' : 'none';
+  });
+}
+
+// Re-inject and re-apply on SPA navigation / DOM changes
+const filterObserver = new MutationObserver(() => {
+  tryInjectFilter();
+  if (document.getElementById(FILTER_BTN_ID)) {
+    applyFilter(activeFilter);
+  }
+});
+filterObserver.observe(document.body, { childList: true, subtree: true });
+
 // Inline SVG logo — viewBox tightly crops the visible paths (y:175–387, x:100–452 + stroke overflow)
 // so it centers properly at any size without vertical offset
 const LOGO_SVG = `<svg class="cum-icon-svg" xmlns="http://www.w3.org/2000/svg" viewBox="75 150 402 237" aria-hidden="true">

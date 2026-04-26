@@ -169,6 +169,202 @@
   margin-top: 5px;
 }
 
+/* ── Recents Filter ────────────────────────────────────────────────────────── */
+
+/* Inline filter button inside the h2 */
+#cum-filter-btn {
+  background: none !important;
+  border: 1px solid var(--border-300, rgba(0,0,0,0.12)) !important;
+  border-radius: 5px !important;
+  padding: 1px 6px !important;
+  font-family: inherit !important;
+  font-size: 10px !important;
+  font-weight: 500 !important;
+  color: var(--text-400, rgba(0,0,0,0.45)) !important;
+  cursor: pointer !important;
+  line-height: 1.5 !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  transition: background 0.12s, color 0.12s !important;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+#cum-filter-btn:hover {
+  background: var(--bg-300, rgba(0,0,0,0.06)) !important;
+  color: var(--text-200, rgba(0,0,0,0.7)) !important;
+}
+
+/* Dropdown panel — attached to body, positioned via JS as fixed */
+/* Dark mode (default) */
+#cum-filter-dropdown {
+  position: fixed !important;
+  z-index: 99999 !important;
+  background: #2a2a2e !important;
+  border: 1px solid rgba(255,255,255,0.1) !important;
+  border-radius: 10px !important;
+  padding: 4px !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.55) !important;
+  overflow: hidden;
+  min-width: 160px;
+  display: flex !important;
+  flex-direction: column !important;
+  max-height: 320px;
+}
+
+#cum-filter-dropdown .cum-dd-search {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  padding: 4px 8px !important;
+  border-bottom: 1px solid rgba(255,255,255,0.07) !important;
+  margin-bottom: 2px !important;
+  flex-shrink: 0;
+}
+
+#cum-filter-dropdown .cum-dd-search input {
+  flex: 1 !important;
+  background: none !important;
+  border: none !important;
+  outline: none !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  color: rgba(255,255,255,0.75) !important;
+  padding: 2px 0 !important;
+  line-height: 1.4 !important;
+}
+
+#cum-filter-dropdown .cum-dd-search input::placeholder {
+  color: rgba(255,255,255,0.25) !important;
+}
+
+#cum-filter-dropdown .cum-dd-scroll {
+  overflow-y: auto !important;
+  flex: 1 !important;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.15) transparent;
+}
+
+#cum-filter-dropdown .cum-dd-header {
+  font-family: inherit;
+  font-size: 10px !important;
+  font-weight: 600 !important;
+  text-transform: uppercase !important;
+  letter-spacing: 0.06em !important;
+  color: rgba(255,255,255,0.3) !important;
+  padding: 4px 8px 6px !important;
+}
+
+#cum-filter-dropdown .cum-dd-item {
+  display: flex !important;
+  align-items: center !important;
+  gap: 6px !important;
+  width: 100% !important;
+  background: none !important;
+  border: none !important;
+  border-radius: 6px !important;
+  padding: 6px 8px !important;
+  font-family: inherit !important;
+  font-size: 12px !important;
+  font-weight: 400 !important;
+  color: rgba(255,255,255,0.45) !important;
+  cursor: pointer !important;
+  text-align: left !important;
+  letter-spacing: 0 !important;
+  text-transform: none !important;
+  transition: background 0.1s, color 0.1s !important;
+  line-height: 1.3 !important;
+}
+
+#cum-filter-dropdown .cum-dd-item:hover {
+  background: rgba(255,255,255,0.07) !important;
+  color: rgba(255,255,255,0.75) !important;
+}
+
+#cum-filter-dropdown .cum-dd-item-active {
+  color: rgba(255,255,255,0.9) !important;
+  font-weight: 500 !important;
+}
+
+#cum-filter-dropdown .cum-dd-check {
+  font-size: 11px !important;
+  width: 12px !important;
+  flex-shrink: 0 !important;
+  color: rgba(255,255,255,0.5) !important;
+  text-align: center !important;
+}
+
+#cum-filter-dropdown .cum-dd-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Light mode — claude.ai adds class on <html> or <body>, or we detect via JS */
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-search,
+.light #cum-filter-dropdown .cum-dd-search,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-search {
+  border-bottom-color: rgba(0,0,0,0.08) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-search input,
+.light #cum-filter-dropdown .cum-dd-search input,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-search input {
+  color: rgba(0,0,0,0.75) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-search input::placeholder,
+.light #cum-filter-dropdown .cum-dd-search input::placeholder,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-search input::placeholder {
+  color: rgba(0,0,0,0.25) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-scroll,
+.light #cum-filter-dropdown .cum-dd-scroll,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-scroll {
+  scrollbar-color: rgba(0,0,0,0.15) transparent;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"],
+.light #cum-filter-dropdown,
+[data-theme="light"] #cum-filter-dropdown {
+  background: #ffffff !important;
+  border-color: rgba(0,0,0,0.1) !important;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.12) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-header,
+.light #cum-filter-dropdown .cum-dd-header,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-header {
+  color: rgba(0,0,0,0.35) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-item,
+.light #cum-filter-dropdown .cum-dd-item,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-item {
+  color: rgba(0,0,0,0.4) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-item:hover,
+.light #cum-filter-dropdown .cum-dd-item:hover,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-item:hover {
+  background: rgba(0,0,0,0.05) !important;
+  color: rgba(0,0,0,0.75) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-item-active,
+.light #cum-filter-dropdown .cum-dd-item-active,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-item-active {
+  color: rgba(0,0,0,0.85) !important;
+}
+
+#cum-filter-dropdown[data-cum-theme="light"] .cum-dd-check,
+.light #cum-filter-dropdown .cum-dd-check,
+[data-theme="light"] #cum-filter-dropdown .cum-dd-check {
+  color: rgba(0,0,0,0.4) !important;
+}
+
 /* Icon-only mode (sidebar collapsed) */
 #claude-usage-monitor-widget .cum-icon-only-view {
   display: none;

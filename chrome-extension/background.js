@@ -157,6 +157,34 @@ function parseExtraUsage(raw) {
   };
 }
 
+async function fetchProjects() {
+  if (!orgId) {
+    const stored = await chrome.storage.session.get('orgId');
+    orgId = stored.orgId ?? null;
+  }
+  if (!orgId) return [];
+
+  const cookie = await chrome.cookies.get({ url: 'https://claude.ai', name: 'sessionKey' });
+  if (!cookie) return [];
+
+  const response = await fetch(
+    `https://claude.ai/api/organizations/${orgId}/projects?include_harmony_projects=true&limit=30&order_by=latest_chat`,
+    {
+      headers: {
+        cookie: `sessionKey=${cookie.value}`,
+        'content-type': 'application/json',
+        'anthropic-client-platform': 'web_claude_ai',
+      },
+    }
+  );
+  if (!response.ok) return [];
+  const raw = await response.json();
+  // Filter out archived projects, return uuid + name
+  return (Array.isArray(raw) ? raw : [])
+    .filter(p => !p.archived_at)
+    .map(p => ({ uuid: p.uuid, name: p.name }));
+}
+
 // Handle messages from content scripts / popup
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.type === 'GET_USAGE') {
@@ -167,6 +195,10 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   }
   if (message.type === 'FORCE_REFRESH') {
     fetchAndStore().then(() => sendResponse({ ok: true }));
+    return true;
+  }
+  if (message.type === 'GET_PROJECTS') {
+    fetchProjects().then(projects => sendResponse({ projects }));
     return true;
   }
 });
