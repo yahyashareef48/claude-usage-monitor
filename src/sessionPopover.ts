@@ -22,6 +22,9 @@ function formatTimeRemaining(resetsAt: string): string {
   const totalMin = Math.floor(ms / 60_000);
   const h = Math.floor(totalMin / 60);
   const m = totalMin % 60;
+  if (h >= 24) {
+    return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  }
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
