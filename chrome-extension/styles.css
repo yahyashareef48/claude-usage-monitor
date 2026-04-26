@@ -168,3 +168,33 @@
   font-style: italic;
   margin-top: 5px;
 }
+
+/* Icon-only mode (sidebar collapsed) */
+#claude-usage-monitor-widget .cum-icon-only-view {
+  display: none;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 0;
+}
+
+#claude-usage-monitor-widget .cum-icon-pct {
+  font-size: 9px !important;
+  font-weight: 700;
+  line-height: 1;
+  text-align: center;
+}
+
+#claude-usage-monitor-widget.cum-icon-only {
+  padding: 6px 4px;
+  border-top: 1px solid var(--border-300, rgba(0, 0, 0, 0.12));
+  border-bottom: 1px solid var(--border-300, rgba(0, 0, 0, 0.12));
+}
+
+#claude-usage-monitor-widget.cum-icon-only .cum-icon-only-view {
+  display: flex;
+}
+
+#claude-usage-monitor-widget.cum-icon-only .cum-full-view {
+  display: none;
+}

@@ -57,6 +57,16 @@ function tryInjectWidget() {
   widget.id = WIDGET_ID;
   rerenderWidget(widget);
   target.insertAdjacentElement('afterend', widget);
+
+  // Switch between full and icon-only mode based on sidebar width
+  const sidebar = target.closest('nav, [class*="sidebar"], [class*="Sidebar"]') ?? target.parentElement;
+  if (sidebar) {
+    const ro = new ResizeObserver(([entry]) => {
+      const w = entry.contentRect.width;
+      widget.classList.toggle('cum-icon-only', w < 100);
+    });
+    ro.observe(sidebar);
+  }
 }
 
 function rerenderWidget(el) {
@@ -86,6 +96,17 @@ function rerenderWidget(el) {
 function renderWidget(data, ts, collapsed) {
   const chevron = collapsed ? '▸' : '▾';
 
+  // Icon-only mode is handled via CSS .cum-icon-only class on the widget root,
+  // but we embed the icon-only markup as a sibling div so no re-render is needed on resize.
+  // We always render it; CSS shows/hides the right section.
+  const fhIconPct = data?.fiveHour != null ? Math.round(data.fiveHour.utilization) : null;
+  const iconColor = fhIconPct != null ? utilizationColor(fhIconPct) : '#2e9e52';
+  const iconOnlyHtml = `
+    <div class="cum-icon-only-view">
+      ${LOGO_SVG}
+      ${fhIconPct != null ? `<span class="cum-icon-pct" style="color:${iconColor}">${fhIconPct}%</span>` : ''}
+    </div>`;
+
   if (collapsed) {
     const fh = data?.fiveHour;
     const pct = fh ? Math.round(fh.utilization) : null;
@@ -100,12 +121,15 @@ function renderWidget(data, ts, collapsed) {
       : '';
 
     return `
-      <div class="cum-heading cum-clickable">
-        ${LOGO_SVG}
-        <span class="cum-title">Plan Usage Limits</span>
-        ${pctHtml}
-        ${resetHtml}
-        <span class="cum-chevron">${chevron}</span>
+      ${iconOnlyHtml}
+      <div class="cum-full-view">
+        <div class="cum-heading cum-clickable">
+          ${LOGO_SVG}
+          <span class="cum-title">Plan Usage Limits</span>
+          ${pctHtml}
+          ${resetHtml}
+          <span class="cum-chevron">${chevron}</span>
+        </div>
       </div>
     `;
   }
@@ -125,13 +149,16 @@ function renderWidget(data, ts, collapsed) {
   const footerHtml = `<div class="cum-footer">${ts ? `Updated ${timeAgo(ts)}` : ''}<button class="cum-reload" title="Refresh">↻</button></div>`;
 
   return `
-    <div class="cum-heading cum-clickable">
-      ${LOGO_SVG}
-      <span class="cum-title">Plan Usage Limits</span>
-      <span class="cum-chevron">${chevron}</span>
+    ${iconOnlyHtml}
+    <div class="cum-full-view">
+      <div class="cum-heading cum-clickable">
+        ${LOGO_SVG}
+        <span class="cum-title">Plan Usage Limits</span>
+        <span class="cum-chevron">${chevron}</span>
+      </div>
+      ${rowsHtml}
+      ${footerHtml}
     </div>
-    ${rowsHtml}
-    ${footerHtml}
   `;
 }
 
