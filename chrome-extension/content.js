@@ -214,6 +214,10 @@ function formatTimeRemaining(resetsAt) {
   if (diff <= 0) return 'resetting…';
   const h = Math.floor(diff / 3_600_000);
   const m = Math.floor((diff % 3_600_000) / 60_000);
+  if (h >= 24) {
+    // Show "Sun 4:30 AM" style
+    return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+  }
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
 }
