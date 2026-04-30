@@ -231,11 +231,26 @@ h1 { font-size: 18px; margin-bottom: 4px; }
 .value { font-weight: 600; }
 .no-quota { color: var(--vscode-descriptionForeground); font-size: 12px; font-style: italic; }
 hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16px 0; }
+.refresh-btn {
+	background: none;
+	border: none;
+	cursor: pointer;
+	color: var(--vscode-descriptionForeground);
+	font-size: 11px;
+	padding: 0;
+	opacity: 0.7;
+	transition: opacity 0.15s;
+}
+.refresh-btn:hover { opacity: 1; }
 </style>
 </head>
 <body>
 <h1>Claude Usage</h1>
-<div class="subtitle">Updated ${timeAgo(data.fetchedAt)} · <span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span></div>
+<div class="subtitle" style="display:flex;align-items:center;gap:8px">
+	<span>Updated ${timeAgo(data.fetchedAt)} · <span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span></span>
+	<button class="refresh-btn" onclick="vscode.postMessage({command:'refresh'})" title="Refresh now">↻ Refresh</button>
+</div>
+<script>const vscode = acquireVsCodeApi();</script>
 ${error ? (() => { const { message, hint } = formatError(error); return `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8">${message}</span>${hint ? `<br><span style="opacity:0.7;font-size:11px">${hint}</span>` : ''}</div>`; })() : ''}
 <div class="section">
 	<div class="section-title">Quota Windows</div>
@@ -262,10 +277,15 @@ export class UsagePanel {
       "claudeUsage",
       "Claude Usage",
       { viewColumn: vscode.ViewColumn.One, preserveFocus: true },
-      { enableScripts: false, retainContextWhenHidden: false },
+      { enableScripts: true, retainContextWhenHidden: false },
     );
     this.panel.iconPath = vscode.Uri.joinPath(this.extensionUri, "resources", "icon.png");
     this.panel.webview.html = buildHtml(data, error);
+    this.panel.webview.onDidReceiveMessage((msg) => {
+      if (msg.command === 'refresh') {
+        vscode.commands.executeCommand('claude-usage-monitor.refresh');
+      }
+    });
     this.panel.onDidDispose(() => {
       this.panel = undefined;
     });
