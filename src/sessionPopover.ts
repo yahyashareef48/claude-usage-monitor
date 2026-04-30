@@ -28,7 +28,43 @@ function formatTimeRemaining(resetsAt: string): string {
   return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-function formatError(raw: string): string {
+function formatError(raw: string): { message: string; hint: string | null } {
+  // 401 — expired / invalid token
+  if (raw.includes('401')) {
+    return {
+      message: 'HTTP 401 — Unauthorized: session token expired or invalid.',
+      hint: 'Fix: start a new Claude Code session in your terminal (<code>claude</code>), then refresh via <strong>Ctrl+Shift+P</strong> → <em>Claude: Refresh Usage</em>. If it still fails, log out (<code>claude logout</code>) and log back in.',
+    };
+  }
+  // 403 — no access
+  if (raw.includes('403')) {
+    return {
+      message: 'HTTP 403 — Forbidden: account may lack API access.',
+      hint: 'Fix: ensure you are logged in to Claude Code with a valid Pro or Max subscription. You can log in by running <code>claude</code> in your terminal.',
+    };
+  }
+  // 429 — rate limited
+  if (raw.includes('429')) {
+    return {
+      message: 'HTTP 429 — Rate limited by Anthropic API.',
+      hint: 'The extension will retry automatically with backoff. No action needed.',
+    };
+  }
+  // Network errors
+  if (raw.includes('timed out') || raw.includes('ECONNREFUSED') || raw.includes('ENOTFOUND')) {
+    return {
+      message: `Network error — could not reach api.anthropic.com.`,
+      hint: 'Fix: check your internet connection, then refresh via <strong>Ctrl+Shift+P</strong> → <em>Claude: Refresh Usage</em>.',
+    };
+  }
+  // No token found
+  if (raw.includes('No OAuth token')) {
+    return {
+      message: 'No OAuth token found — not logged in to Claude Code.',
+      hint: 'Fix: open a terminal and run <code>claude</code> to start a session. Once logged in, refresh via <strong>Ctrl+Shift+P</strong> → <em>Claude: Refresh Usage</em>.',
+    };
+  }
+  // Generic API error — try to extract JSON message
   const jsonMatch = raw.match(/\{[\s\S]*\}/);
   if (jsonMatch) {
     try {
@@ -36,11 +72,11 @@ function formatError(raw: string): string {
       const inner = parsed?.error;
       if (inner?.message) {
         const prefix = raw.match(/^HTTP \d+/)?.[0];
-        return prefix ? `${prefix} — ${inner.message}` : inner.message;
+        return { message: prefix ? `${prefix} — ${inner.message}` : inner.message, hint: null };
       }
     } catch { /* fall through */ }
   }
-  return raw;
+  return { message: raw, hint: null };
 }
 
 function barColor(pct: number): string {
@@ -86,9 +122,15 @@ function bucketRow(label: string, bucket: QuotaBucket): string {
 
 function buildHtml(data: UsageData | null, error: string | null = null): string {
   if (!data) {
-    const body = error
-      ? `<h3 style="color:#ff6b6b;margin-bottom:12px">Error</h3><p style="font-size:12px;color:var(--vscode-foreground)">${formatError(error)}</p>`
-      : `<h3>No data yet</h3><p>Fetching usage from Anthropic API…</p>`;
+    let body: string;
+    if (error) {
+      const { message, hint } = formatError(error);
+      body = `<h3 style="color:#ff6b6b;margin-bottom:12px">Error</h3>
+<p style="font-size:12px;color:var(--vscode-foreground);margin-bottom:${hint ? '10px' : '0'}">${message}</p>
+${hint ? `<p style="font-size:12px;color:var(--vscode-descriptionForeground);line-height:1.5">${hint}</p>` : ''}`;
+    } else {
+      body = `<h3>No data yet</h3><p>Fetching usage from Anthropic API…</p>`;
+    }
     return `<!DOCTYPE html><html><body style="font-family:var(--vscode-font-family);padding:40px;color:var(--vscode-descriptionForeground);background:var(--vscode-editor-background)">${body}</body></html>`;
   }
 
@@ -194,7 +236,7 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 <body>
 <h1>Claude Usage</h1>
 <div class="subtitle">Updated ${timeAgo(data.fetchedAt)} · <span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span></div>
-${error ? `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8">${formatError(error)}</span></div>` : ''}
+${error ? (() => { const { message, hint } = formatError(error); return `<div style="margin-bottom:16px;padding:8px 12px;background:#ffd93d20;border-left:3px solid #ffd93d;border-radius:4px;font-size:12px"><strong>⚠️ Last poll failed</strong> — showing cached data<br><span style="opacity:0.8">${message}</span>${hint ? `<br><span style="opacity:0.7;font-size:11px">${hint}</span>` : ''}</div>`; })() : ''}
 <div class="section">
 	<div class="section-title">Quota Windows</div>
 	${buckets.length > 0 ? buckets.join("") : '<div class="no-quota">No active quota windows returned.</div>'}

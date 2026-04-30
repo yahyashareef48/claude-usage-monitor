@@ -112,8 +112,34 @@ export class StatusBarManager {
 
 	public showError(message: string) {
 		this.item.text = '$(claude-icon) Error';
-		this.item.tooltip = message;
 		this.item.backgroundColor = new vscode.ThemeColor('statusBarItem.errorBackground');
+
+		let displayMsg = message;
+		let hint: string | null = null;
+		if (message.includes('401')) {
+			displayMsg = 'HTTP 401 — Token expired or invalid.';
+			hint = 'Fix: run `claude` in terminal to start a session, then Ctrl+Shift+P → Claude: Refresh Usage. Or: `claude logout` and log back in.';
+		} else if (message.includes('403')) {
+			displayMsg = 'HTTP 403 — Account lacks API access.';
+			hint = 'Fix: ensure you are logged in to Claude Code with a Pro or Max subscription.';
+		} else if (message.includes('429')) {
+			displayMsg = 'HTTP 429 — Rate limited.';
+			hint = 'The extension will retry automatically.';
+		} else if (message.includes('timed out') || message.includes('ECONNREFUSED') || message.includes('ENOTFOUND')) {
+			displayMsg = 'Network error — cannot reach api.anthropic.com.';
+			hint = 'Fix: check your internet connection, then Ctrl+Shift+P → Claude: Refresh Usage.';
+		} else if (message.includes('No OAuth token')) {
+			displayMsg = 'Not logged in to Claude Code.';
+			hint = 'Fix: run `claude` in terminal to log in, then Ctrl+Shift+P → Claude: Refresh Usage.';
+		}
+
+		const md = new vscode.MarkdownString(
+			hint
+				? `**Error:** ${displayMsg}\n\n${hint}`
+				: `**Error:** ${displayMsg}`
+		);
+		md.supportThemeIcons = true;
+		this.item.tooltip = md;
 	}
 
 	public dispose() {

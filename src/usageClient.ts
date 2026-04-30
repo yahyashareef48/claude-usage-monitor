@@ -88,11 +88,29 @@ export async function fetchUsageData(): Promise<UsageData> {
 		throw new Error(`No OAuth token found. Looked in: ${credPath}${macNote}. Make sure you are logged in to Claude Code.`);
 	}
 
-	const body = await httpsGet(USAGE_URL, {
-		'Authorization': `Bearer ${token}`,
-		'Content-Type': 'application/json',
-		'anthropic-beta': BETA_HEADER,
-	});
+	let body: string;
+	try {
+		body = await httpsGet(USAGE_URL, {
+			'Authorization': `Bearer ${token}`,
+			'Content-Type': 'application/json',
+			'anthropic-beta': BETA_HEADER,
+		});
+	} catch (err) {
+		const msg = err instanceof Error ? err.message : String(err);
+		if (msg.includes('HTTP 401')) {
+			throw new Error('HTTP 401 — Unauthorized: Your session token has expired or is invalid. Fix: start a new Claude Code session, then run "Claude: Refresh Usage" in the VS Code command palette. If that fails, log out and log back in to Claude Code.');
+		}
+		if (msg.includes('HTTP 403')) {
+			throw new Error('HTTP 403 — Forbidden: Your account may not have access to the usage API. Fix: make sure you are logged in to Claude Code with a valid Pro/Max subscription.');
+		}
+		if (msg.includes('HTTP 429')) {
+			throw new Error('HTTP 429 — Rate limited by Anthropic API. The extension will retry automatically with backoff.');
+		}
+		if (msg.includes('timed out') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
+			throw new Error(`Network error: ${msg}. Fix: check your internet connection and try running "Claude: Refresh Usage".`);
+		}
+		throw err;
+	}
 
 	const raw = JSON.parse(body);
 
