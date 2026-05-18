@@ -52,6 +52,36 @@
           ],
           "default": "auto",
           "description": "Clock format for reset times in the usage panel."
+        },
+        "claude-usage-monitor.statusBar": {
+          "type": "string",
+          "enum": [
+            "5h",
+            "7d",
+            "both"
+          ],
+          "enumDescriptions": [
+            "Show 5-hour window utilization and reset countdown (default)",
+            "Show 7-day window utilization and reset countdown",
+            "Show both windows; countdown follows the 5-hour reset"
+          ],
+          "default": "5h",
+          "description": "Which quota windows to display in the status bar text."
+        },
+        "claude-usage-monitor.statusBarColorFrom": {
+          "type": "string",
+          "enum": [
+            "5h",
+            "7d",
+            "max"
+          ],
+          "enumDescriptions": [
+            "Color the status bar by the 5-hour window only",
+            "Color the status bar by the 7-day window only",
+            "Color the status bar by whichever window's utilization is higher (default)"
+          ],
+          "default": "max",
+          "description": "Which window's utilization drives the status bar background color (≥60% warning, ≥80% error)."
         }
       }
     },

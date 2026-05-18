@@ -1,5 +1,21 @@
 import * as vscode from 'vscode';
-import { UsageData } from './types';
+import { QuotaBucket, UsageData } from './types';
+
+type StatusBarMode = '5h' | '7d' | 'both';
+type ColorSource   = '5h' | '7d' | 'max';
+
+interface StatusBarConfig {
+	mode:        StatusBarMode;
+	colorSource: ColorSource;
+}
+
+function readConfig(): StatusBarConfig {
+	const cfg = vscode.workspace.getConfiguration('claude-usage-monitor');
+	return {
+		mode:        cfg.get<StatusBarMode>('statusBar', '5h'),
+		colorSource: cfg.get<ColorSource>('statusBarColorFrom', 'max'),
+	};
+}
 
 function timeAgo(date: Date): string {
 	const sec = Math.floor((Date.now() - date.getTime()) / 1000);
@@ -27,16 +43,70 @@ function utilizationColor(pct: number): vscode.ThemeColor | undefined {
 	return undefined;
 }
 
+function pickColorPct(
+	colorSource: ColorSource,
+	fh: QuotaBucket,
+	sd: QuotaBucket | null,
+): number {
+	switch (colorSource) {
+		case '5h':  return fh.utilization;
+		case '7d':  return sd ? sd.utilization : fh.utilization;
+		case 'max': return sd ? Math.max(fh.utilization, sd.utilization) : fh.utilization;
+	}
+}
+
+function renderText(
+	mode: StatusBarMode,
+	fh: QuotaBucket,
+	sd: QuotaBucket | null,
+	withWarning: boolean,
+): string {
+	const suffix = withWarning ? ' $(warning)' : '';
+	const fhPct  = fh.utilization.toFixed(0);
+	const fhTime = formatTimeRemaining(fh.resetsAt);
+
+	if (mode === '7d' && sd) {
+		const sdPct  = sd.utilization.toFixed(0);
+		const sdTime = formatTimeRemaining(sd.resetsAt);
+		return `$(claude-icon) 7d ${sdPct}% · ${sdTime}${suffix}`;
+	}
+
+	if (mode === 'both' && sd) {
+		const sdPct = sd.utilization.toFixed(0);
+		return `$(claude-icon) 5h ${fhPct}% (${fhTime}) · 7d ${sdPct}%${suffix}`;
+	}
+
+	// '5h' mode, or '7d'/'both' fallback when sevenDay is missing
+	return `$(claude-icon) ${fhPct}% · ${fhTime}${suffix}`;
+}
+
 export class StatusBarManager {
 	private item: vscode.StatusBarItem;
+	private lastData:  UsageData | null = null;
+	private lastError: string | null    = null;
+	private configSub: vscode.Disposable;
 
 	constructor() {
 		this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
 		this.item.command = 'claude-usage-monitor.showPopup';
 		this.item.show();
+
+		this.configSub = vscode.workspace.onDidChangeConfiguration((e) => {
+			if (
+				e.affectsConfiguration('claude-usage-monitor.statusBar') ||
+				e.affectsConfiguration('claude-usage-monitor.statusBarColorFrom')
+			) {
+				if (this.lastData) {
+					this.update(this.lastData, this.lastError);
+				}
+			}
+		});
 	}
 
 	public update(data: UsageData, error: string | null = null) {
+		this.lastData  = data;
+		this.lastError = error;
+
 		const fh = data.fiveHour;
 		if (!fh) {
 			this.item.text = '$(claude-icon) No data';
@@ -45,18 +115,16 @@ export class StatusBarManager {
 			return;
 		}
 
-		const pct = fh.utilization;
-		const timeLeft = formatTimeRemaining(fh.resetsAt);
+		const { mode, colorSource } = readConfig();
+		const sd = data.sevenDay;
+		const eu = data.extraUsage;
 
-		this.item.text = error
-			? `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft} $(warning)`
-			: `$(claude-icon) ${pct.toFixed(0)}% · ${timeLeft}`;
+		this.item.text = renderText(mode, fh, sd, !!error);
+
+		const colorPct = pickColorPct(colorSource, fh, sd);
 		this.item.backgroundColor = error
 			? new vscode.ThemeColor('statusBarItem.warningBackground')
-			: utilizationColor(pct);
-
-		const sd  = data.sevenDay;
-		const eu  = data.extraUsage;
+			: utilizationColor(colorPct);
 
 		const bar = (p: number) => {
 			const filled = Math.round(Math.min(p, 100) / 10);
@@ -68,8 +136,8 @@ export class StatusBarManager {
 			`$(claude-icon) **Claude Usage**`,
 			`---`,
 			`**5-Hour Window**`,
-			`\`${bar(pct)}\``,
-			`↻ Resets in **${timeLeft}**`,
+			`\`${bar(fh.utilization)}\``,
+			`↻ Resets in **${formatTimeRemaining(fh.resetsAt)}**`,
 		];
 
 		if (sd) {
@@ -144,5 +212,6 @@ export class StatusBarManager {
 
 	public dispose() {
 		this.item.dispose();
+		this.configSub.dispose();
 	}
 }
