@@ -89,7 +89,8 @@ function renderExtraUsageText(eu: ExtraUsage | null, withWarning: boolean): stri
     return `$(claude-icon) No extra usage${suffix}`;
   }
   const spent = (eu.usedCredits / 100).toFixed(2);
-  return `$(claude-icon) $${spent}${suffix}`;
+  const pct = eu.utilization !== null ? ` · ${eu.utilization.toFixed(1)}%` : '';
+  return `$(claude-icon) $${spent}${pct}${suffix}`;
 }
 
 export class StatusBarManager {
@@ -120,35 +121,28 @@ export class StatusBarManager {
 		this.lastData  = data;
 		this.lastError = error;
 
+		const { mode, colorSource, display } = readConfig();
 		const fh = data.fiveHour;
-		if (!fh) {
+		const sd = data.sevenDay;
+		const eu = data.extraUsage;
+
+		if (display === 'extraUsage') {
+			this.item.text = renderExtraUsageText(eu, !!error);
+			this.item.backgroundColor = error
+				? new vscode.ThemeColor('statusBarItem.warningBackground')
+				: utilizationColor(eu?.utilization ?? 0);
+		} else if (fh) {
+			this.item.text = renderText(mode, fh, sd, !!error);
+			const colorPct = pickColorPct(colorSource, fh, sd);
+			this.item.backgroundColor = error
+				? new vscode.ThemeColor('statusBarItem.warningBackground')
+				: utilizationColor(colorPct);
+		} else {
 			this.item.text = '$(claude-icon) No data';
 			this.item.tooltip = 'No 5-hour quota data returned from API';
 			this.item.backgroundColor = undefined;
 			return;
 		}
-
-		const { mode, colorSource, display } = readConfig();
-		const sd = data.sevenDay;
-		const eu = data.extraUsage;
-
-		if (display === 'extraUsage') {
-		  this.item.text = renderExtraUsageText(eu, !!error);
-		  this.item.backgroundColor = error
-		    ? new vscode.ThemeColor('statusBarItem.warningBackground')
-		    : utilizationColor(eu?.utilization ?? 0);
-		} else {
-		  this.item.text = renderText(mode, fh, sd, !!error);
-		  const colorPct = pickColorPct(colorSource, fh, sd);
-		  this.item.backgroundColor = error
-		    ? new vscode.ThemeColor('statusBarItem.warningBackground')
-		    : utilizationColor(colorPct);
-		}
-		
-		const colorPct = pickColorPct(colorSource, fh, sd);
-		this.item.backgroundColor = error
-			? new vscode.ThemeColor('statusBarItem.warningBackground')
-			: utilizationColor(colorPct);
 
 		const bar = (p: number) => {
 			const filled = Math.round(Math.min(p, 100) / 10);
@@ -156,13 +150,15 @@ export class StatusBarManager {
 			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${p.toFixed(0)}% ${color}`;
 		};
 
-		const lines: string[] = [
-			`$(claude-icon) **Claude Usage**`,
-			`---`,
-			`**5-Hour Window**`,
-			`\`${bar(fh.utilization)}\``,
-			`↻ Resets in **${formatTimeRemaining(fh.resetsAt)}**`,
-		];
+		const lines: string[] = [`$(claude-icon) **Claude Usage**`, `---`];
+
+		if (fh) {
+			lines.push(
+				`**5-Hour Window**`,
+				`\`${bar(fh.utilization)}\``,
+				`↻ Resets in **${formatTimeRemaining(fh.resetsAt)}**`,
+			);
+		}
 
 		if (sd) {
 			lines.push(
