@@ -7,6 +7,7 @@ type ColorSource   = '5h' | '7d' | 'max';
 interface StatusBarConfig {
 	mode:        StatusBarMode;
 	colorSource: ColorSource;
+	display:     'quota' | 'extraUsage'; 
 }
 
 function readConfig(): StatusBarConfig {
@@ -14,6 +15,7 @@ function readConfig(): StatusBarConfig {
 	return {
 		mode:        cfg.get<StatusBarMode>('statusBar', '5h'),
 		colorSource: cfg.get<ColorSource>('statusBarColorFrom', 'max'),
+		display:     cfg.get<'quota' | 'extraUsage'>('statusBarDisplay', 'quota'),
 	};
 }
 
@@ -80,6 +82,15 @@ function renderText(
 	return `$(claude-icon) ${fhPct}% · ${fhTime}${suffix}`;
 }
 
+function renderExtraUsageText(eu: ExtraUsage | null, withWarning: boolean): string {
+  const suffix = withWarning ? ' $(warning)' : '';
+  if (!eu?.isEnabled || eu.usedCredits === null) {
+    return `$(claude-icon) No extra usage${suffix}`;
+  }
+  const spent = (eu.usedCredits / 100).toFixed(2);
+  return `$(claude-icon) $${spent}${suffix}`;
+}
+
 export class StatusBarManager {
 	private item: vscode.StatusBarItem;
 	private lastData:  UsageData | null = null;
@@ -94,7 +105,8 @@ export class StatusBarManager {
 		this.configSub = vscode.workspace.onDidChangeConfiguration((e) => {
 			if (
 				e.affectsConfiguration('claude-usage-monitor.statusBar') ||
-				e.affectsConfiguration('claude-usage-monitor.statusBarColorFrom')
+				e.affectsConfiguration('claude-usage-monitor.statusBarColorFrom') ||
+				e.affectsConfiguration('claude-usage-monitor.statusBarDisplay')
 			) {
 				if (this.lastData) {
 					this.update(this.lastData, this.lastError);
@@ -119,8 +131,21 @@ export class StatusBarManager {
 		const sd = data.sevenDay;
 		const eu = data.extraUsage;
 
-		this.item.text = renderText(mode, fh, sd, !!error);
+		const { mode, colorSource, display } = readConfig();  // already destructured below — just add display
 
+		if (display === 'extraUsage') {
+		  this.item.text = renderExtraUsageText(eu, !!error);
+		  this.item.backgroundColor = error
+		    ? new vscode.ThemeColor('statusBarItem.warningBackground')
+		    : utilizationColor(eu?.utilization ?? 0);
+		} else {
+		  this.item.text = renderText(mode, fh, sd, !!error);
+		  const colorPct = pickColorPct(colorSource, fh, sd);
+		  this.item.backgroundColor = error
+		    ? new vscode.ThemeColor('statusBarItem.warningBackground')
+		    : utilizationColor(colorPct);
+		}
+		
 		const colorPct = pickColorPct(colorSource, fh, sd);
 		this.item.backgroundColor = error
 			? new vscode.ThemeColor('statusBarItem.warningBackground')
