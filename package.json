@@ -82,6 +82,16 @@
           ],
           "default": "max",
           "description": "Which window's utilization drives the status bar background color (≥60% warning, ≥80% error)."
+        },
+        "claude-usage-monitor.statusBarDisplay": {
+          "type": "string",
+          "enum": ["quota", "extraUsage"],
+          "enumDescriptions": [
+            "Show quota window utilization and reset countdown (default)",
+            "Show extra usage (pay-as-you-go) spend in the status bar"
+          ],
+          "default": "quota",
+          "description": "What to display as the primary metric in the status bar."
         }
       }
     },
