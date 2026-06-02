@@ -1,13 +1,14 @@
 import * as vscode from 'vscode';
-import { QuotaBucket, UsageData } from './types';
+import { QuotaBucket, UsageData, ExtraUsage } from './types';
 
-type StatusBarMode = '5h' | '7d' | 'both';
-type ColorSource   = '5h' | '7d' | 'max';
+type StatusBarMode 		= '5h' | '7d' | 'both';
+type ColorSource   		= '5h' | '7d' | 'max';
+type StatusBarDisplay 	= 'quota' | 'extraUsage';
 
 interface StatusBarConfig {
 	mode:        StatusBarMode;
 	colorSource: ColorSource;
-	display:     'quota' | 'extraUsage'; 
+	display:     StatusBarDisplay; 
 }
 
 function readConfig(): StatusBarConfig {
@@ -15,7 +16,7 @@ function readConfig(): StatusBarConfig {
 	return {
 		mode:        cfg.get<StatusBarMode>('statusBar', '5h'),
 		colorSource: cfg.get<ColorSource>('statusBarColorFrom', 'max'),
-		display:     cfg.get<'quota' | 'extraUsage'>('statusBarDisplay', 'quota'),
+		display:     cfg.get<StatusBarDisplay>('statusBarDisplay', 'quota'),
 	};
 }
 
@@ -127,11 +128,9 @@ export class StatusBarManager {
 			return;
 		}
 
-		const { mode, colorSource } = readConfig();
+		const { mode, colorSource, display } = readConfig();
 		const sd = data.sevenDay;
 		const eu = data.extraUsage;
-
-		const { mode, colorSource, display } = readConfig();  // already destructured below — just add display
 
 		if (display === 'extraUsage') {
 		  this.item.text = renderExtraUsageText(eu, !!error);
