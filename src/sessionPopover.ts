@@ -160,7 +160,7 @@ ${hint ? `<p style="font-size:12px;color:var(--vscode-descriptionForeground);lin
 	<div class="settings-group">
 		<div class="settings-group-title">Status Bar</div>
 		<div class="setting-row">
-			<span class="setting-label">Display <span class="info-icon" title="Which quota window to show in the status bar text. '5h' shows the 5-hour countdown and reset time, '7d' shows the 7-day window, 'both' shows both.">ⓘ</span></span>
+			<span class="setting-label">Display <span class="info-icon" title="Which quota window to show in the status bar text: '5h' shows the 5-hour countdown and reset time, '7d' the 7-day window, 'both' both. Applies only when the account has quota windows — pay-as-you-go-only accounts always show credit spend, and any account shows a 💳 spend indicator automatically once it enters paid overage.">ⓘ</span></span>
 			<select class="setting-control" onchange="updateSetting('claude-usage-monitor.statusBar', this.value)">
 				<option value="5h"${sel(statusBar, '5h')}>5-Hour window</option>
 				<option value="7d"${sel(statusBar, '7d')}>7-Day window</option>

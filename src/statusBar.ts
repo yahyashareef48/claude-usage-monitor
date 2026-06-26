@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { QuotaBucket, UsageData } from './types';
+import { ExtraUsage, QuotaBucket, UsageData } from './types';
 
 type StatusBarMode = '5h' | '7d' | 'both';
 type ColorSource   = '5h' | '7d' | 'max';
@@ -47,6 +47,23 @@ function utilizationColor(pct: number, warnT: number, errT: number): vscode.Them
 	return undefined;
 }
 
+function hasSpend(eu: ExtraUsage | null): eu is ExtraUsage {
+	return !!eu && eu.isEnabled && eu.usedCredits !== null;
+}
+
+function formatSpend(eu: ExtraUsage): string {
+	const spent = ((eu.usedCredits ?? 0) / 100).toFixed(2);
+	const cap   = eu.monthlyLimit !== null ? ` / $${(eu.monthlyLimit / 100).toFixed(2)}` : '';
+	const cur   = eu.currency ? ` ${eu.currency}` : '';
+	return `$${spent}${cap}${cur}`;
+}
+
+function renderPayText(eu: ExtraUsage, withWarning: boolean): string {
+	const suffix = withWarning ? ' $(warning)' : '';
+	const pct    = eu.utilization !== null ? `${eu.utilization.toFixed(0)}% · ` : '';
+	return `$(claude-icon) 💳 ${pct}${formatSpend(eu)}${suffix}`;
+}
+
 function pickColorPct(
 	colorSource: ColorSource,
 	fh: QuotaBucket,
@@ -63,25 +80,31 @@ function renderText(
 	mode: StatusBarMode,
 	fh: QuotaBucket,
 	sd: QuotaBucket | null,
+	eu: ExtraUsage | null,
 	withWarning: boolean,
 ): string {
 	const suffix = withWarning ? ' $(warning)' : '';
+	// Surface pay-as-you-go spend inline once credits are actually being used, so
+	// overage on a regular plan is never hidden behind the quota windows.
+	const overage = hasSpend(eu) && (eu.usedCredits ?? 0) > 0
+		? ` · 💳 $${((eu.usedCredits ?? 0) / 100).toFixed(2)}`
+		: '';
 	const fhPct  = fh.utilization.toFixed(0);
 	const fhTime = formatTimeRemaining(fh.resetsAt);
 
 	if (mode === '7d' && sd) {
 		const sdPct  = sd.utilization.toFixed(0);
 		const sdTime = formatTimeRemaining(sd.resetsAt);
-		return `$(claude-icon) 7d ${sdPct}% · ${sdTime}${suffix}`;
+		return `$(claude-icon) 7d ${sdPct}% · ${sdTime}${overage}${suffix}`;
 	}
 
 	if (mode === 'both' && sd) {
 		const sdPct = sd.utilization.toFixed(0);
-		return `$(claude-icon) 5h ${fhPct}% (${fhTime}) · 7d ${sdPct}%${suffix}`;
+		return `$(claude-icon) 5h ${fhPct}% (${fhTime}) · 7d ${sdPct}%${overage}${suffix}`;
 	}
 
 	// '5h' mode, or '7d'/'both' fallback when sevenDay is missing
-	return `$(claude-icon) ${fhPct}% · ${fhTime}${suffix}`;
+	return `$(claude-icon) ${fhPct}% · ${fhTime}${overage}${suffix}`;
 }
 
 export class StatusBarManager {
@@ -113,24 +136,33 @@ export class StatusBarManager {
 		this.lastData  = data;
 		this.lastError = error;
 
-		const fh = data.fiveHour;
-		if (!fh) {
-			this.item.text = '$(claude-icon) No data';
-			this.item.tooltip = 'No 5-hour quota data returned from API';
-			this.item.backgroundColor = undefined;
-			return;
-		}
-
 		const { mode, colorSource, warningThreshold, errorThreshold } = readConfig();
+		const fh = data.fiveHour;
 		const sd = data.sevenDay;
 		const eu = data.extraUsage;
 
-		this.item.text = renderText(mode, fh, sd, !!error);
+		// Decide status bar text + which percentage drives the background color.
+		// Pay-as-you-go-only accounts return no quota windows (fh === null), so
+		// fall back to the credit display whenever spend data is available.
+		let colorPct: number | null;
+		if (fh) {
+			this.item.text = renderText(mode, fh, sd, eu, !!error);
+			colorPct = pickColorPct(colorSource, fh, sd);
+		} else if (hasSpend(eu)) {
+			this.item.text = renderPayText(eu, !!error);
+			colorPct = eu.utilization;
+		} else {
+			this.item.text = '$(claude-icon) No data';
+			this.item.tooltip = 'No quota or usage data returned from API';
+			this.item.backgroundColor = error
+				? new vscode.ThemeColor('statusBarItem.warningBackground')
+				: undefined;
+			return;
+		}
 
-		const colorPct = pickColorPct(colorSource, fh, sd);
 		this.item.backgroundColor = error
 			? new vscode.ThemeColor('statusBarItem.warningBackground')
-			: utilizationColor(colorPct, warningThreshold, errorThreshold);
+			: (colorPct !== null ? utilizationColor(colorPct, warningThreshold, errorThreshold) : undefined);
 
 		const bar = (p: number) => {
 			const filled = Math.round(Math.min(p, 100) / 10);
@@ -141,10 +173,15 @@ export class StatusBarManager {
 		const lines: string[] = [
 			`$(claude-icon) **Claude Usage**`,
 			`---`,
-			`**5-Hour Window**`,
-			`\`${bar(fh.utilization)}\``,
-			`↻ Resets in **${formatTimeRemaining(fh.resetsAt)}**`,
 		];
+
+		if (fh) {
+			lines.push(
+				`**5-Hour Window**`,
+				`\`${bar(fh.utilization)}\``,
+				`↻ Resets in **${formatTimeRemaining(fh.resetsAt)}**`,
+			);
+		}
 
 		if (sd) {
 			lines.push(

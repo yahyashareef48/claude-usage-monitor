@@ -66,7 +66,7 @@
             "Show both windows; countdown follows the 5-hour reset"
           ],
           "default": "5h",
-          "description": "Which quota windows to display in the status bar text."
+          "description": "Which quota windows to display in the status bar text. Pay-as-you-go-only accounts always show credit spend; any account shows a credit indicator automatically once it enters paid overage."
         },
         "claude-usage-monitor.statusBarColorFrom": {
           "type": "string",
