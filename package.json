@@ -38,6 +38,12 @@
     "configuration": {
       "title": "Claude Usage Monitor",
       "properties": {
+        "claude-usage-monitor.configDir": {
+          "type": "string",
+          "default": "",
+          "scope": "window",
+          "markdownDescription": "Which Claude Code config directory this window reports on — the equivalent of `CLAUDE_CONFIG_DIR`, for people running more than one account. `~` is expanded.\n\nExample: `~/.claude-work`.\n\nLeave empty to use `$CLAUDE_CONFIG_DIR`, then `~/.claude`. Note that setting `CLAUDE_CONFIG_DIR` through `claudeCode.environmentVariables` or `terminal.integrated.env.*` does **not** reach this extension — those only inject into the Claude Code process and integrated terminals respectively — so this setting is the way to do it per window.\n\nCached usage, burn-rate history and notification state are namespaced per directory, so two windows on two accounts stay independent."
+        },
         "claude-usage-monitor.clockFormat": {
           "type": "string",
           "enum": [

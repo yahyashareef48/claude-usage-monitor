@@ -135,8 +135,24 @@ Click the status bar item (or run **Claude: Show Usage** from the Command Palett
 All data comes from the Anthropic API — the same source Claude Code itself uses for its internal quota display. No local JSONL parsing or file watching is involved.
 
 The credentials file path follows Claude Code's own resolution logic:
-1. `$CLAUDE_CONFIG_DIR/.credentials.json` if the env var is set
-2. `~/.claude/.credentials.json` otherwise
+1. `claude-usage-monitor.configDir` if set
+2. `$CLAUDE_CONFIG_DIR/.credentials.json` if the env var is set
+3. `~/.claude/.credentials.json` otherwise
+
+On macOS, recent versions of Claude Code keep the token in the Keychain rather than in `.credentials.json`. When the file is missing, the token is read from the Keychain item Claude Code namespaces per config directory — `Claude Code-credentials-<first 8 hex of sha256(config dir)>` — falling back to the legacy unsuffixed `Claude Code-credentials` for the default directory.
+
+### Running more than one account
+
+Claude Code supports a second account through `CLAUDE_CONFIG_DIR`. That env var does not reach VS Code extensions, though — `claudeCode.environmentVariables` injects only into the Claude Code process, and `terminal.integrated.env.*` only into integrated terminals. Point the extension at the right account per window instead:
+
+```jsonc
+// .vscode/settings.json, or the user settings of a separate VS Code install
+{
+  "claude-usage-monitor.configDir": "~/.claude-work"
+}
+```
+
+Cached usage, burn-rate history and notification state are namespaced per config directory, so two windows watching two accounts stay independent. The default directory keeps the unnamespaced keys, so nothing is lost on upgrade.
 
 ## Privacy
 

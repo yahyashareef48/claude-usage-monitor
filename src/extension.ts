@@ -3,7 +3,8 @@ import { fetchUsageData } from './usageClient';
 import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { maybeNotify } from './notifications';
-import { recordHistory } from './history';
+import { recordHistory, resetHistoryCache } from './history';
+import { accountScopedKey, affectsAccount } from './claudeConfig';
 import { UsageData } from './types';
 
 const POLL_INTERVAL_MS = 2  * 60_000; // 2 minutes
@@ -17,7 +18,10 @@ const BACKOFF_STEPS_MS = [
 // Versioned key: pre-1.3.0 builds wrote a UsageData without `limits` to the
 // unversioned key. Sharing a key across versions let an older co-installed
 // build feed limits-free data to a newer one, blanking the per-model bars.
-const CACHE_KEY = 'claudeUsage.cache.v2';
+//
+// Account-scoped, and read through a function rather than a const, because the
+// configured account can change while the window is open — see claudeConfig.
+const cacheKey = () => accountScopedKey('claudeUsage.cache.v2');
 
 interface CacheEntry {
 	data:      UsageData | null;
@@ -93,7 +97,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	async function refresh() {
 		// Check global cache first — skip fetch if another window just did it
-		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 		if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
 			errorCount = cached.error ? errorCount : 0;
 			applyState(cached.data, cached.error);
@@ -104,20 +108,20 @@ export function activate(context: vscode.ExtensionContext) {
 			const data = await fetchUsageData();
 			errorCount = 0;
 			const entry: CacheEntry = { data, error: null, fetchedAt: Date.now() };
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(data, null);
 		} catch (err) {
 			errorCount++;
 			const error = err instanceof Error ? err.message : String(err);
 			const entry: CacheEntry = { data: null, error, fetchedAt: Date.now() };
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(null, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
 	}
 
 	// On startup: show cached data immediately, then fetch if stale
-	const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+	const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 	if (cached) {
 		applyState(cached.data, cached.error);
 		const age = Date.now() - cached.fetchedAt;
@@ -146,6 +150,17 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Pointing the window at a different account invalidates everything derived
+	// from the old one, so drop it and refetch rather than waiting for the poll.
+	const onConfig = vscode.workspace.onDidChangeConfiguration((e) => {
+		if (!affectsAccount(e)) { return; }
+		resetHistoryCache();
+		currentData = null;
+		if (timer) { clearTimeout(timer); timer = null; }
+		statusBar.showInitializing();
+		refresh().then(() => scheduleNext());
+	});
+
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
 		panel.show(currentData, currentError);
 	});
@@ -153,7 +168,7 @@ export function activate(context: vscode.ExtensionContext) {
 	const refreshCmd = vscode.commands.registerCommand('claude-usage-monitor.refresh', async () => {
 		if (timer) { clearTimeout(timer); timer = null; }
 		// Force a real fetch by clearing the cache
-		await context.globalState.update(CACHE_KEY, undefined);
+		await context.globalState.update(cacheKey(), undefined);
 		await refresh();
 		scheduleNext();
 	});
@@ -163,6 +178,7 @@ export function activate(context: vscode.ExtensionContext) {
 		statusBar,
 		panel,
 		onFocus,
+		onConfig,
 		showPopup,
 		refreshCmd,
 	);
