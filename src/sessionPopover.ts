@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { UsageData, QuotaBucket, UsageLimit } from "./types";
+import { getAccount } from "./claudeConfig";
 import {
   Burn,
   Store as HistoryStore,
@@ -337,8 +338,14 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
     errorHtml = `<div class="banner">${lead}<br><span style="opacity:0.85">${message}</span>${hint ? `<br><span class="banner-hint">${hint}</span>` : ""}</div>`;
   }
 
-  const source = `<span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span>`;
-  const subtitle = data ? `Updated ${timeAgo(data.fetchedAt)} · ${source}` : source;
+  const source  = `<span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span>`;
+  // Name the account: two panels on two accounts are otherwise identical.
+  const account = getAccount()?.email;
+  const subtitle = [
+    account ? escapeHtml(account) : null,
+    data ? `Updated ${timeAgo(data.fetchedAt)}` : null,
+    source,
+  ].filter(Boolean).join(" · ");
 
   const eu = data?.extraUsage ?? null;
   const extraSection = eu?.isEnabled
@@ -458,7 +465,7 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
 		</div>
 	</div>
 

@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getAccount } from './claudeConfig';
 import { UsageData, UsageLimit } from './types';
 
 /**
@@ -183,12 +184,32 @@ function fieldValue(w: QuotaWindow, field: string): string {
 }
 
 /**
+ * Which account this window reports on, as template tokens.
+ *
+ * Not addressed as a window, because it is not one: `{account}` is the e-mail,
+ * since that is the one field that tells two logged-in accounts apart at a
+ * glance. Every token is empty when `.claude.json` cannot be read, which the
+ * separator collapsing below then tidies away.
+ */
+export function accountTokens(): Record<string, string> {
+	const account = getAccount();
+	const email   = account?.email ?? '';
+	return {
+		'account':       email,
+		'account.email': email,
+		'account.user':  email.split('@')[0],
+		'account.name':  account?.displayName ?? '',
+		'account.org':   account?.organizationName ?? '',
+	};
+}
+
+/**
  * Every `window.field` token with its current value, keyed lower-case. The
  * panel renders its live preview from this same map, so the preview and the
  * real status bar can never drift apart.
  */
 export function tokenValues(data: UsageData | null): Record<string, string> {
-	const out: Record<string, string> = {};
+	const out: Record<string, string> = { ...accountTokens() };
 	if (!data) { return out; }
 	const windows = allWindows(data);
 	const max = highest(windows);
@@ -206,15 +227,23 @@ function isDecorationOnly(s: string): boolean {
 	return s.replace(/\$\([^)]*\)/g, '').trim().length === 0;
 }
 
+/** "{5h.reset} ({account})" must not render "3h 40m ()" on an unreadable account. */
+function stripEmptyGroups(s: string): string {
+	return s.replace(/\(\s*\)|\[\s*\]/g, '');
+}
+
+/** Punctuation an empty token can leave dangling: "{account.name} @ {account.org}". */
+const STRANDED = /^[\s·/|,@-]+|[\s·/|,@-]+$/g;
+
 /**
  * Drop the empty segments an unresolved token leaves behind. A segment holding
  * only the icon is kept but does not earn a separator, so a format like
  * "{icon} {model:Gone.pct} · {5h.pct}" renders "$(icon) 12%", not "$(icon) · 12%".
  */
 function collapse(s: string): string {
-	const parts = s
+	const parts = stripEmptyGroups(s)
 		.split('·')
-		.map((part) => part.replace(/\s+/g, ' ').trim())
+		.map((part) => part.replace(/\s+/g, ' ').trim().replace(STRANDED, ''))
 		.filter((part) => part.length > 0);
 
 	let out = '';
@@ -225,7 +254,7 @@ function collapse(s: string): string {
 	}
 	// An empty token can also strand a literal separator the user typed, as in
 	// "{extra.spent} / {extra.limit}" on an account with no monthly cap.
-	return out.replace(/^[\s·/|,-]+/, '').replace(/[\s·/|,-]+$/, '');
+	return out.replace(STRANDED, '');
 }
 
 export function renderTemplate(
@@ -265,6 +294,10 @@ export function presets(data: UsageData | null): Preset[] {
 		{ id: 'both', label: 'Both',         template: '{icon} 5h {5h.pct} ({5h.reset}) · 7d {7d.pct}' },
 		{ id: 'max',  label: 'Worst window', template: '{icon} {max.name} {max.pct}' },
 	];
+	// Only worth offering when we can actually name the account.
+	if (getAccount()?.email) {
+		out.push({ id: 'account', label: 'With account', template: '{icon} {5h.pct} · {5h.reset} ({account})' });
+	}
 	for (const w of data ? allWindows(data) : []) {
 		if (w.key.startsWith('model:')) {
 			out.push({ id: w.key, label: w.name, template: `{icon} ${w.name} {${w.key}.pct} · {${w.key}.reset}` });

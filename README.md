@@ -47,10 +47,13 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 | `{icon} {max.name} {max.pct}` | `Fable 91%` — follows whichever window is worst |
 | `{icon} {5h.bar} {5h.pct}` | `█░░░░░░░░░ 12%` |
 | `{icon} {extra.spent} / {extra.limit}` | `$12.50 / $40.00` |
+| `{icon} {5h.pct} · {5h.reset} ({account})` | `12% · 3h 40m (you@example.com)` |
 
 Fields are `.pct`, `.reset`, `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
 
-A token naming a window your account doesn't report renders empty, and the separator it stranded is removed rather than left dangling — so `{extra.spent} / {extra.limit}` shows just `$7.00` when no monthly cap is set, and pay-as-you-go tokens disappear entirely when credits are off.
+`{account}` names the account the window is logged in as — the e-mail, read from Claude Code's own `.claude.json`, which the usage API itself never returns. `{account.user}` is the part before the @, `{account.name}` the display name and `{account.org}` the organisation. Useful when two windows watch two accounts (see [Running more than one account](#running-more-than-one-account)); the tooltip and the panel name the account either way.
+
+A token naming a window your account doesn't report renders empty, and the separator it stranded is removed rather than left dangling — so `{extra.spent} / {extra.limit}` shows just `$7.00` when no monthly cap is set, and pay-as-you-go tokens disappear entirely when credits are off. The same holds for brackets an empty token sat in: `({account})` leaves nothing behind rather than an empty `()`.
 
 The usage panel's **Settings** tab has presets, a live preview, and a checkbox per window for `claude-usage-monitor.statusBarColorFrom`, which drives the indicator from the highest of the windows you check (default: the 5-hour and 7-day windows).
 
@@ -153,6 +156,8 @@ Claude Code supports a second account through `CLAUDE_CONFIG_DIR`. That env var 
 ```
 
 Cached usage, burn-rate history and notification state are namespaced per config directory, so two windows watching two accounts stay independent. The default directory keeps the unnamespaced keys, so nothing is lost on upgrade.
+
+Each window then labels itself with the account it is reporting on: the status bar tooltip and the panel header name it, and `{account}` puts it in the status bar text itself — `12% · 3h 40m (you@work.com)`.
 
 ## Privacy
 

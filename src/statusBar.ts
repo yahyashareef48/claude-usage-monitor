@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { getAccount } from './claudeConfig';
 import { UsageData } from './types';
 import {
 	allWindows,
@@ -131,7 +132,20 @@ export class StatusBarManager {
 			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${p.toFixed(0)}% ${color}`;
 		};
 
-		const lines: string[] = [`$(claude-icon) **Claude Usage**`, `---`];
+		const lines: string[] = [`$(claude-icon) **Claude Usage**`];
+
+		// Which account these numbers belong to. Worth a line even when the status
+		// bar text does not carry {account}: with two windows on two accounts the
+		// percentages alone are indistinguishable.
+		const account = getAccount();
+		if (account?.email) {
+			// Personal orgs are named "<e-mail>'s Organization", which says nothing twice.
+			const org = account.organizationName;
+			const suffix = org && !org.startsWith(account.email) ? ` · ${org}` : '';
+			lines.push(`$(account) ${account.email}${suffix}`);
+		}
+
+		lines.push(`---`);
 
 		// One entry per window the account reports — per-model and pay-as-you-go
 		// included, since they all come from the same normalised list.

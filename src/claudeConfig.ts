@@ -1,3 +1,4 @@
+import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as crypto from 'crypto';
@@ -73,6 +74,42 @@ export function affectsAccount(e: vscode.ConfigurationChangeEvent): boolean {
 	return e.affectsConfiguration('claude-usage-monitor.configDir');
 }
 
+/** The Claude account a window is monitoring, as Claude Code recorded it. */
+export interface ClaudeAccount {
+	email:            string | null;
+	displayName:      string | null;
+	organizationName: string | null;
+}
+
+/**
+ * Who this window is logged in as.
+ *
+ * The usage API answers for whoever the token belongs to and never names them,
+ * so the only way to label a window with its account is Claude Code's own
+ * `.claude.json`, where `oauthAccount` is written on login and refreshed with
+ * the profile. That matters most for the very setup `configDir` exists for: two
+ * windows, two accounts, otherwise indistinguishable percentages.
+ */
+export function getAccount(): ClaudeAccount | null {
+	for (const file of accountFiles()) {
+		let mtimeMs: number;
+		try { mtimeMs = fs.statSync(file).mtimeMs; } catch { continue; }
+
+		const known = cachedAccount && cachedAccount.path === file ? cachedAccount : null;
+		if (known && known.mtimeMs === mtimeMs) { return known.account; }
+
+		const account = readAccount(file);
+		// Claude Code rewrites .claude.json constantly, so a read can land
+		// mid-write. Keep the account already known rather than blanking the
+		// status bar for one poll.
+		if (!account) { return known ? known.account : null; }
+
+		cachedAccount = { path: file, mtimeMs, account };
+		return account;
+	}
+	return null;
+}
+
 function sha256(s: string): string {
 	return crypto.createHash('sha256').update(s).digest('hex');
 }
@@ -89,4 +126,43 @@ function expandHome(p: string): string {
 	if (p === '~') { return os.homedir(); }
 	if (p.startsWith('~/')) { return path.join(os.homedir(), p.slice(2)); }
 	return p;
+}
+
+interface CachedAccount { path: string; mtimeMs: number; account: ClaudeAccount; }
+
+/** Keyed by path, so switching `configDir` cannot return the other account. */
+let cachedAccount: CachedAccount | null = null;
+
+/**
+ * `.claude.json` candidates for this config directory, most authoritative first.
+ *
+ * Current Claude Code keeps the file inside the config directory; older versions
+ * kept it at ~/.claude.json, and upgraded machines still carry that copy. The
+ * legacy path is offered only for the default directory — reading it for an
+ * explicitly configured one would name the other account, the same trap
+ * getKeychainServices() avoids.
+ */
+function accountFiles(): string[] {
+	const dir    = getClaudeConfigDir();
+	const inside = path.join(dir, '.claude.json');
+	return dir === defaultConfigDir() ? [inside, path.join(os.homedir(), '.claude.json')] : [inside];
+}
+
+function readAccount(file: string): ClaudeAccount | null {
+	let oauth: Record<string, unknown> | undefined;
+	try {
+		oauth = JSON.parse(fs.readFileSync(file, 'utf8'))?.oauthAccount;
+	} catch {
+		return null;
+	}
+	if (!oauth) { return null; }
+	return {
+		email:            str(oauth.emailAddress),
+		displayName:      str(oauth.displayName),
+		organizationName: str(oauth.organizationName),
+	};
+}
+
+function str(v: unknown): string | null {
+	return typeof v === 'string' && v.trim() ? v.trim() : null;
 }
