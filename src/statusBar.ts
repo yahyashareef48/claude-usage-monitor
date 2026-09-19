@@ -4,7 +4,7 @@ import {
 	allWindows,
 	blockedWindow,
 	colorPct,
-	formatTimeRemaining,
+	formatReset,
 	IndicatorConfig,
 	Level,
 	levelOf,
@@ -115,7 +115,7 @@ export class StatusBarManager {
 
 		if (blocked) {
 			const what  = blocked.key === '5h' ? 'blocked' : `${blocked.name} blocked`;
-			const when  = blocked.resetsAt ? ` · ${formatTimeRemaining(blocked.resetsAt)}` : '';
+			const when  = blocked.resetsAt ? ` · ${formatReset(blocked.resetsAt)}` : '';
 			const glyph = ind.mode === 'emoji' && dot ? ` ${dot}` : '';
 			this.item.text = `$(claude-icon) ${what}${when}${glyph}${error ? ' $(warning)' : ''}`;
 		} else {
@@ -140,7 +140,7 @@ export class StatusBarManager {
 				const cap = w.money.limit ? ` / ${w.money.limit}` : '';
 				lines.push(`**${w.label}**  💳 ${w.money.spent}${cap} ${data.extraUsage?.currency ?? ''}`.trim());
 			} else if (w.resetsAt) {
-				lines.push(`**${w.label}**\n\n\`${bar(w.pct)}\`\n\n↻ Resets in **${formatTimeRemaining(w.resetsAt)}**`);
+				lines.push(`**${w.label}**\n\n\`${bar(w.pct)}\`\n\n↻ Resets **${formatReset(w.resetsAt)}**`);
 			} else {
 				lines.push(`**${w.label}**\n\n\`${bar(w.pct)}\``);
 			}
