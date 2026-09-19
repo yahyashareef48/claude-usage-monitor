@@ -280,6 +280,7 @@ function readPanelConfig() {
     warnT:    cfg.get<number>('warningThreshold', 60),
     errT:     cfg.get<number>('errorThreshold', 80),
     clockFmt: cfg.get<string>('clockFormat', 'auto'),
+    resetDisp: cfg.get<string>('resetDisplay', 'countdown'),
     refreshS: cfg.get<number>('refreshInterval', 120),
   };
 }
@@ -302,7 +303,7 @@ interface PanelState {
  * user is mid-edit all survive a poll.
  */
 function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
-  const { warnT, errT, clockFmt, refreshS } = readPanelConfig();
+  const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
   const burnByKey = new Map<string, string>();
@@ -463,7 +464,7 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
 		</div>
 	</div>
 
@@ -532,6 +533,14 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 				<option value="auto"${sel(clockFmt, 'auto')}>Auto (system default)</option>
 				<option value="12h"${sel(clockFmt, '12h')}>12-hour (7:44 PM)</option>
 				<option value="24h"${sel(clockFmt, '24h')}>24-hour (19:44)</option>
+			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Show reset as <span class="info-icon" title="How {…reset} tokens and the status bar show when a window resets.">ⓘ</span></span>
+			<select class="setting-control" onchange="updateSetting('claude-usage-monitor.resetDisplay', this.value)">
+				<option value="countdown"${sel(resetDisp, 'countdown')}>Countdown (3h 37m)</option>
+				<option value="clock"${sel(resetDisp, 'clock')}>Clock time (13:27)</option>
+				<option value="both"${sel(resetDisp, 'both')}>Both (3h 37m (13:27))</option>
 			</select>
 		</div>
 		<div class="setting-row">
