@@ -6,12 +6,76 @@ import { QuotaBucket, UsageData, UsageLimit } from './types';
 import { getClaudeConfigDir, getKeychainServices } from './claudeConfig';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
+const CLIENT_NAME = 'claude-usage-monitor';
 const BETA_HEADER = 'oauth-2025-04-20';
+/** Guard against a nonsense header locking the status bar for days. */
+const MAX_RETRY_AFTER_S = 6 * 60 * 60;
 
 interface Credentials {
 	claudeAiOauth?: {
 		accessToken?: string;
 	};
+}
+
+/**
+ * Carries the server's own `retry-after` so the caller can wait exactly as
+ * long as it is told. Polling before that point keeps the rate limit window
+ * saturated, which is how a single 429 turns into a permanent lockout.
+ */
+export class UsageHttpError extends Error {
+	constructor(
+		message: string,
+		readonly statusCode: number | undefined,
+		readonly retryAfterMs: number | null,
+	) {
+		super(message);
+		this.name = 'UsageHttpError';
+	}
+}
+
+/**
+ * Node sends no User-Agent of its own, and an unidentified caller appears to
+ * land in a much tighter rate limit bucket on this endpoint. Name ourselves
+ * honestly: this is not Claude Code and must not pretend to be.
+ */
+let userAgent = CLIENT_NAME;
+
+/** Called once at activation with the version from the extension manifest. */
+export function setUserAgent(version: string): void {
+	const clean = version.trim();
+	userAgent = clean ? `${CLIENT_NAME}/${clean}` : CLIENT_NAME;
+}
+
+/**
+ * Marker in a 429 message naming when the extension will try again. The status
+ * bar and the panel rewrite these messages, and read it back with
+ * {@link retryAtFromMessage} so the wait survives that rewrite.
+ */
+export const RETRY_AT_PREFIX = 'Retry at ';
+
+function formatClock(at: Date): string {
+	return at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+/** The clock time out of a 429 message, or null when the API did not say. */
+export function retryAtFromMessage(message: string): string | null {
+	const at = message.match(/Retry at ([^.]+)\./);
+	return at ? at[1] : null;
+}
+
+/** `retry-after` is either a delta in seconds or an HTTP date. Both are valid. */
+function parseRetryAfter(raw: string | string[] | undefined): number | null {
+	if (typeof raw !== 'string' || !raw.trim()) { return null; }
+	const seconds = Number(raw.trim());
+	if (Number.isFinite(seconds)) {
+		if (seconds < 0) { return null; }
+		return Math.min(seconds, MAX_RETRY_AFTER_S) * 1000;
+	}
+	const at = Date.parse(raw);
+	if (Number.isNaN(at)) { return null; }
+	const ms = at - Date.now();
+	if (ms <= 0) { return null; }
+	return Math.min(ms, MAX_RETRY_AFTER_S * 1000);
 }
 
 /** execFile, not exec: the service name is derived from user input and must not reach a shell. */
@@ -65,7 +129,11 @@ function httpsGet(url: string, headers: Record<string, string>): Promise<string>
 				if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
 					resolve(body);
 				} else {
-					reject(new Error(`HTTP ${res.statusCode}: ${body}`));
+					reject(new UsageHttpError(
+						`HTTP ${res.statusCode}: ${body}`,
+						res.statusCode,
+						parseRetryAfter(res.headers['retry-after']),
+					));
 				}
 			});
 		});
@@ -136,6 +204,7 @@ export async function fetchUsageData(): Promise<UsageData> {
 			'Authorization': `Bearer ${token}`,
 			'Content-Type': 'application/json',
 			'anthropic-beta': BETA_HEADER,
+			'User-Agent': userAgent,
 		});
 	} catch (err) {
 		const msg = err instanceof Error ? err.message : String(err);
@@ -146,7 +215,13 @@ export async function fetchUsageData(): Promise<UsageData> {
 			throw new Error('HTTP 403 — Forbidden: Your account may not have access to the usage API. Fix: make sure you are logged in to Claude Code with a valid Pro/Max subscription.');
 		}
 		if (msg.includes('HTTP 429')) {
-			throw new Error('HTTP 429 — Rate limited by Anthropic API. The extension will retry automatically with backoff.');
+			const retryAfterMs = err instanceof UsageHttpError ? err.retryAfterMs : null;
+			// An absolute time, so the message stays true however long the
+			// error sits on screen. A relative one would age into a lie.
+			const wait = retryAfterMs === null
+				? 'The extension will retry automatically with backoff.'
+				: `${RETRY_AT_PREFIX}${formatClock(new Date(Date.now() + retryAfterMs))}.`;
+			throw new UsageHttpError(`HTTP 429 — Rate limited by Anthropic API. ${wait}`, 429, retryAfterMs);
 		}
 		if (msg.includes('timed out') || msg.includes('ECONNREFUSED') || msg.includes('ENOTFOUND')) {
 			throw new Error(`Network error: ${msg}. Fix: check your internet connection and try running "Claude: Refresh Usage".`);

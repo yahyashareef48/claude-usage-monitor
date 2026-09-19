@@ -57,12 +57,27 @@
             "Force 24-hour clock (e.g. 19:44)"
           ],
           "default": "auto",
-          "description": "Clock format for reset times in the usage panel."
+          "description": "Clock format for reset times in the usage panel and status bar."
+        },
+        "claude-usage-monitor.resetDisplay": {
+          "type": "string",
+          "enum": [
+            "countdown",
+            "clock",
+            "both"
+          ],
+          "enumDescriptions": [
+            "Time remaining (e.g. 3h 37m)",
+            "Local clock time of the reset (e.g. 13:27)",
+            "Both (e.g. 3h 37m (13:27))"
+          ],
+          "default": "countdown",
+          "markdownDescription": "How reset times show in the status bar and `{….reset}` tokens."
         },
         "claude-usage-monitor.statusBarFormat": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark. `{account}` is the e-mail of the account this window is logged in as, with `{account.user}` (before the @), `{account.name}` and `{account.org}` as variants. `{{`/`}}` escape braces, and a token that cannot be resolved renders empty — along with the brackets it sat in, so `({account})` leaves nothing behind rather than an empty `()`.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n- `{icon} {5h.pct} · {5h.reset} ({account})` → `12% · 3h 40m (you@example.com)`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
+          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark. `{account}` is the e-mail of the account this window is logged in as, with `{account.user}` (before the @), `{account.name}` and `{account.org}` as variants. `{{`/`}}` escape braces, and a token that cannot be resolved renders empty — along with the brackets it sat in, so `({account})` leaves nothing behind rather than an empty `()`.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n- `{icon} {5h.pct} · {5h.reset} ({account})` → `12% · 3h 40m (you@example.com)`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
         },
         "claude-usage-monitor.statusBar": {
           "type": "string",
@@ -149,6 +164,13 @@
           },
           "additionalProperties": false,
           "markdownDescription": "Glyphs used by `emoji` mode of `#claude-usage-monitor.statusBarIndicator#`, and by the `{dot}` format token in any mode. Any text works, not just emoji. Keep the glyphs the same width or the bar will shift as the level changes — the emoji-presentation shapes (\ud83d\udfe2 \ud83d\udfe1 \ud83d\udd34 \ud83d\udfe0 \u26a0\ufe0f) are all double-width."
+        },
+        "claude-usage-monitor.refreshInterval": {
+          "type": "number",
+          "default": 120,
+          "minimum": 60,
+          "maximum": 3600,
+          "markdownDescription": "How often to poll the usage API, in seconds (default 120, minimum 60). Polling only happens while a VS Code window is focused, and all windows share one cache so the interval applies per machine, not per window. Raise this if you see `HTTP 429 — Rate limited` in the status bar: the usage endpoint has a small hourly budget per account."
         },
         "claude-usage-monitor.burnRate": {
           "type": "boolean",

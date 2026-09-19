@@ -1,6 +1,7 @@
 import * as vscode from "vscode";
 import { UsageData, QuotaBucket, UsageLimit } from "./types";
 import { getAccount } from "./claudeConfig";
+import { retryAtFromMessage } from "./usageClient";
 import {
   Burn,
   Store as HistoryStore,
@@ -61,9 +62,12 @@ function formatError(raw: string): { message: string; hint: string | null } {
     };
   }
   if (raw.includes('429')) {
+    const at = retryAtFromMessage(raw);
     return {
       message: 'HTTP 429 — Rate limited by Anthropic API.',
-      hint: 'The extension will retry automatically with backoff. No action needed.',
+      hint: at
+        ? `Waiting until <strong>${at}</strong>, as the API asked. Retrying sooner only keeps the limit full, so the panel will sit on the last reading until then.`
+        : 'The extension will retry automatically with backoff. No action needed.',
     };
   }
   if (raw.includes('timed out') || raw.includes('ECONNREFUSED') || raw.includes('ENOTFOUND')) {
@@ -277,6 +281,8 @@ function readPanelConfig() {
     warnT:    cfg.get<number>('warningThreshold', 60),
     errT:     cfg.get<number>('errorThreshold', 80),
     clockFmt: cfg.get<string>('clockFormat', 'auto'),
+    resetDisp: cfg.get<string>('resetDisplay', 'countdown'),
+    refreshS: cfg.get<number>('refreshInterval', 120),
   };
 }
 
@@ -298,7 +304,7 @@ interface PanelState {
  * user is mid-edit all survive a poll.
  */
 function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
-  const { warnT, errT, clockFmt } = readPanelConfig();
+  const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
   const burnByKey = new Map<string, string>();
@@ -465,7 +471,7 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
 		</div>
 	</div>
 
@@ -535,6 +541,22 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 				<option value="12h"${sel(clockFmt, '12h')}>12-hour (7:44 PM)</option>
 				<option value="24h"${sel(clockFmt, '24h')}>24-hour (19:44)</option>
 			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Show reset as <span class="info-icon" title="How {…reset} tokens and the status bar show when a window resets.">ⓘ</span></span>
+			<select class="setting-control" onchange="updateSetting('claude-usage-monitor.resetDisplay', this.value)">
+				<option value="countdown"${sel(resetDisp, 'countdown')}>Countdown (3h 37m)</option>
+				<option value="clock"${sel(resetDisp, 'clock')}>Clock time (13:27)</option>
+				<option value="both"${sel(resetDisp, 'both')}>Both (3h 37m (13:27))</option>
+			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Refresh interval <span class="info-icon" title="How often the usage API is polled, in seconds (minimum 60). Only while a VS Code window is focused; all windows share one cache. Raise this if the status bar shows HTTP 429: the usage endpoint has a small hourly budget per account.">ⓘ</span></span>
+			<div class="threshold-wrap">
+				<input type="number" class="setting-input" min="60" max="3600" step="30" value="${refreshS}"
+					onchange="updateSetting('claude-usage-monitor.refreshInterval', Number(this.value))">
+				<span class="threshold-pct">s</span>
+			</div>
 		</div>
 	</div>`;
 

@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { fetchUsageData } from './usageClient';
+import { fetchUsageData, setUserAgent, UsageHttpError } from './usageClient';
 import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { maybeNotify } from './notifications';
@@ -7,13 +7,29 @@ import { recordHistory, resetHistoryCache } from './history';
 import { accountScopedKey, affectsAccount } from './claudeConfig';
 import { UsageData } from './types';
 
-const POLL_INTERVAL_MS = 2  * 60_000; // 2 minutes
-const CACHE_TTL_MS     = 115_000;     // treat cache as fresh if < ~2min old
+const CONFIG_SECTION           = 'claude-usage-monitor';
+const DEFAULT_POLL_INTERVAL_S  = 120;
+const MIN_POLL_INTERVAL_S      = 60;
+const MAX_POLL_INTERVAL_S      = 3600;
+// The cache is considered fresh for slightly less than one interval, so a
+// window whose timer fires a moment early still reuses the previous fetch.
+const CACHE_TTL_SLACK_MS       = 5_000;
 const BACKOFF_STEPS_MS = [
 	4  * 60_000,  // 1st error → wait 4 min
 	8  * 60_000,  // 2nd error → wait 8 min
 	16 * 60_000,  // 3rd+ error → wait 16 min
 ];
+
+/** Poll interval from settings, clamped to the documented range. */
+function pollIntervalMs(): number {
+	const raw = vscode.workspace.getConfiguration(CONFIG_SECTION).get<number>('refreshInterval');
+	const seconds = typeof raw === 'number' && Number.isFinite(raw) ? raw : DEFAULT_POLL_INTERVAL_S;
+	return Math.min(MAX_POLL_INTERVAL_S, Math.max(MIN_POLL_INTERVAL_S, seconds)) * 1000;
+}
+
+function cacheTtlMs(): number {
+	return pollIntervalMs() - CACHE_TTL_SLACK_MS;
+}
 
 // Versioned key: pre-1.3.0 builds wrote a UsageData without `limits` to the
 // unversioned key. Sharing a key across versions let an older co-installed
@@ -27,6 +43,12 @@ interface CacheEntry {
 	data:      UsageData | null;
 	error:     string | null;
 	fetchedAt: number; // Date.now()
+	/**
+	 * Epoch ms until which the API told us to stay away (`retry-after` on a
+	 * 429). Lives in the shared cache so every window honours one block
+	 * instead of each of them discovering it again.
+	 */
+	blockedUntil?: number;
 }
 
 function reviveCache(raw: CacheEntry | undefined): CacheEntry | null {
@@ -56,6 +78,7 @@ function dropLegacyKeys(memento: vscode.Memento) {
 }
 
 export function activate(context: vscode.ExtensionContext) {
+	setUserAgent(String(context.extension.packageJSON?.version ?? ''));
 	dropLegacyKeys(context.globalState);
 
 	const statusBar = new StatusBarManager();
@@ -65,7 +88,12 @@ export function activate(context: vscode.ExtensionContext) {
 	let currentError: string | null    = null;
 	let errorCount    = 0;
 	let timer: ReturnType<typeof setTimeout> | null = null;
-	let windowFocused = true;
+	let blockedUntil = 0; // epoch ms, from the API's own retry-after
+	// Read the real state: onDidChangeWindowState only fires on a *change*, so a
+	// window that activates unfocused would otherwise poll forever believing it
+	// is focused. On a machine with several windows open that multiplies every
+	// poll, and the usage endpoint is rate limited per account.
+	let windowFocused = vscode.window.state.focused;
 
 	function applyState(data: UsageData | null, error: string | null) {
 		if (data) { currentData = data; } // keep last good data on error
@@ -85,9 +113,15 @@ export function activate(context: vscode.ExtensionContext) {
 	function scheduleNext() {
 		if (!windowFocused) { return; } // don't poll in background
 
-		const delay = errorCount === 0
-			? POLL_INTERVAL_MS
-			: BACKOFF_STEPS_MS[Math.min(errorCount - 1, BACKOFF_STEPS_MS.length - 1)];
+		// A 429 comes with the exact time to wait. Retrying earlier keeps the
+		// rate limit window saturated, so the block never lifts. Honour it over
+		// both the interval and the backoff.
+		const interval = pollIntervalMs();
+		const backoff = errorCount === 0
+			? interval
+			: Math.max(interval, BACKOFF_STEPS_MS[Math.min(errorCount - 1, BACKOFF_STEPS_MS.length - 1)]);
+		const untilUnblocked = blockedUntil - Date.now() + 1_000; // clear the boundary
+		const delay = Math.max(backoff, untilUnblocked);
 
 		timer = setTimeout(async () => {
 			await refresh();
@@ -96,9 +130,19 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	async function refresh() {
-		// Check global cache first — skip fetch if another window just did it
 		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
-		if (cached && (Date.now() - cached.fetchedAt) < CACHE_TTL_MS) {
+
+		// Another window (or an earlier poll here) was told to back off. Calling
+		// anyway would count against the same account budget and keep the block
+		// alive, so show what we have and wait it out.
+		if (cached?.blockedUntil && cached.blockedUntil > Date.now()) {
+			blockedUntil = cached.blockedUntil;
+			applyState(cached.data, cached.error);
+			return;
+		}
+
+		// Skip the fetch if another window just did it
+		if (cached && (Date.now() - cached.fetchedAt) < cacheTtlMs()) {
 			errorCount = cached.error ? errorCount : 0;
 			applyState(cached.data, cached.error);
 			return;
@@ -107,35 +151,46 @@ export function activate(context: vscode.ExtensionContext) {
 		try {
 			const data = await fetchUsageData();
 			errorCount = 0;
+			blockedUntil = 0;
 			const entry: CacheEntry = { data, error: null, fetchedAt: Date.now() };
 			await context.globalState.update(cacheKey(), entry);
 			applyState(data, null);
 		} catch (err) {
 			errorCount++;
 			const error = err instanceof Error ? err.message : String(err);
+			const retryAfterMs = err instanceof UsageHttpError ? err.retryAfterMs : null;
+			blockedUntil = retryAfterMs === null ? 0 : Date.now() + retryAfterMs;
 			const entry: CacheEntry = { data: null, error, fetchedAt: Date.now() };
+			if (blockedUntil > 0) { entry.blockedUntil = blockedUntil; }
 			await context.globalState.update(cacheKey(), entry);
 			applyState(null, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
 	}
 
-	// On startup: show cached data immediately, then fetch if stale
+	// On startup: show whatever the shared cache holds immediately.
 	const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 	if (cached) {
 		applyState(cached.data, cached.error);
-		const age = Date.now() - cached.fetchedAt;
-		if (age < CACHE_TTL_MS) {
+	} else {
+		statusBar.showInitializing();
+	}
+
+	// Only a focused window fetches. Restoring a session opens every window at
+	// once; without this they would all fetch in the same instant, before any of
+	// them has written the shared cache the others check. An unfocused window
+	// stays idle until onDidChangeWindowState reports focus, which refreshes.
+	if (windowFocused) {
+		const age = cached ? Date.now() - cached.fetchedAt : Number.POSITIVE_INFINITY;
+		const ttl = cacheTtlMs();
+		if (age < ttl) {
 			// Cache is fresh — delay first fetch to fill remaining TTL
 			timer = setTimeout(() => {
 				refresh().then(() => scheduleNext());
-			}, CACHE_TTL_MS - age);
+			}, ttl - age);
 		} else {
 			refresh().then(() => scheduleNext());
 		}
-	} else {
-		statusBar.showInitializing();
-		refresh().then(() => scheduleNext());
 	}
 
 	const onFocus = vscode.window.onDidChangeWindowState((state) => {
@@ -152,7 +207,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// Pointing the window at a different account invalidates everything derived
 	// from the old one, so drop it and refetch rather than waiting for the poll.
-	const onConfig = vscode.workspace.onDidChangeConfiguration((e) => {
+	const onAccountChange = vscode.workspace.onDidChangeConfiguration((e) => {
 		if (!affectsAccount(e)) { return; }
 		resetHistoryCache();
 		currentData = null;
@@ -165,10 +220,20 @@ export function activate(context: vscode.ExtensionContext) {
 		panel.show(currentData, currentError);
 	});
 
+	// Apply a changed interval without a reload: restart the timer from now.
+	const onIntervalChange = vscode.workspace.onDidChangeConfiguration((event) => {
+		if (!event.affectsConfiguration(`${CONFIG_SECTION}.refreshInterval`)) { return; }
+		if (timer) { clearTimeout(timer); timer = null; }
+		scheduleNext();
+	});
+
 	const refreshCmd = vscode.commands.registerCommand('claude-usage-monitor.refresh', async () => {
 		if (timer) { clearTimeout(timer); timer = null; }
-		// Force a real fetch by clearing the cache
-		await context.globalState.update(cacheKey(), undefined);
+		// Force a real fetch by clearing the cache, unless the API told us to
+		// wait: a manual retry during a block costs quota and extends nothing.
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
+		const stillBlocked = !!cached?.blockedUntil && cached.blockedUntil > Date.now();
+		if (!stillBlocked) { await context.globalState.update(cacheKey(), undefined); }
 		await refresh();
 		scheduleNext();
 	});
@@ -178,7 +243,8 @@ export function activate(context: vscode.ExtensionContext) {
 		statusBar,
 		panel,
 		onFocus,
-		onConfig,
+		onAccountChange,
+		onIntervalChange,
 		showPopup,
 		refreshCmd,
 	);

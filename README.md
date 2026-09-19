@@ -6,7 +6,11 @@ A VS Code extension that shows your real-time Claude Code quota usage directly i
 
 ## How It Works
 
-The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 2 minutes (only when the window is focused) and displays the results without any additional login or configuration.
+The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 2 minutes by default (only when the window is focused) and displays the results without any additional login or configuration.
+
+When the API answers `HTTP 429` it also says how long to wait, and the extension waits exactly that long. The block is stored in the cache all windows share, so one window being told to back off stops the others too.
+
+The interval is configurable with `claude-usage-monitor.refreshInterval` (seconds, minimum 60). All windows share one cache, so the interval applies per machine. If the status bar shows `HTTP 429 — Rate limited`, raise it: the usage endpoint has a small hourly budget per account, and every open VS Code window, Claude Code session and other usage tool on the machine draws from the same budget.
 
 ## Features
 
@@ -49,7 +53,9 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 | `{icon} {extra.spent} / {extra.limit}` | `$12.50 / $40.00` |
 | `{icon} {5h.pct} · {5h.reset} ({account})` | `12% · 3h 40m (you@example.com)` |
 
-Fields are `.pct`, `.reset`, `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
+Fields are `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
+
+Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown.
 
 `{account}` names the account the window is logged in as — the e-mail, read from Claude Code's own `.claude.json`, which the usage API itself never returns. `{account.user}` is the part before the @, `{account.name}` the display name and `{account.org}` the organisation. Useful when two windows watch two accounts (see [Running more than one account](#running-more-than-one-account)); the tooltip and the panel name the account either way.
 
