@@ -3,7 +3,8 @@ import { fetchUsageData, setUserAgent, UsageHttpError } from './usageClient';
 import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { maybeNotify } from './notifications';
-import { recordHistory } from './history';
+import { recordHistory, resetHistoryCache } from './history';
+import { accountScopedKey, affectsAccount } from './claudeConfig';
 import { UsageData } from './types';
 
 const CONFIG_SECTION           = 'claude-usage-monitor';
@@ -33,7 +34,10 @@ function cacheTtlMs(): number {
 // Versioned key: pre-1.3.0 builds wrote a UsageData without `limits` to the
 // unversioned key. Sharing a key across versions let an older co-installed
 // build feed limits-free data to a newer one, blanking the per-model bars.
-const CACHE_KEY = 'claudeUsage.cache.v2';
+//
+// Account-scoped, and read through a function rather than a const, because the
+// configured account can change while the window is open — see claudeConfig.
+const cacheKey = () => accountScopedKey('claudeUsage.cache.v2');
 
 interface CacheEntry {
 	data:      UsageData | null;
@@ -126,7 +130,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	async function refresh() {
-		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 
 		// Another window (or an earlier poll here) was told to back off. Calling
 		// anyway would count against the same account budget and keep the block
@@ -149,7 +153,7 @@ export function activate(context: vscode.ExtensionContext) {
 			errorCount = 0;
 			blockedUntil = 0;
 			const entry: CacheEntry = { data, error: null, fetchedAt: Date.now() };
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(data, null);
 		} catch (err) {
 			errorCount++;
@@ -158,14 +162,14 @@ export function activate(context: vscode.ExtensionContext) {
 			blockedUntil = retryAfterMs === null ? 0 : Date.now() + retryAfterMs;
 			const entry: CacheEntry = { data: null, error, fetchedAt: Date.now() };
 			if (blockedUntil > 0) { entry.blockedUntil = blockedUntil; }
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(null, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
 	}
 
 	// On startup: show whatever the shared cache holds immediately.
-	const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+	const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 	if (cached) {
 		applyState(cached.data, cached.error);
 	} else {
@@ -201,12 +205,23 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Pointing the window at a different account invalidates everything derived
+	// from the old one, so drop it and refetch rather than waiting for the poll.
+	const onAccountChange = vscode.workspace.onDidChangeConfiguration((e) => {
+		if (!affectsAccount(e)) { return; }
+		resetHistoryCache();
+		currentData = null;
+		if (timer) { clearTimeout(timer); timer = null; }
+		statusBar.showInitializing();
+		refresh().then(() => scheduleNext());
+	});
+
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
 		panel.show(currentData, currentError);
 	});
 
 	// Apply a changed interval without a reload: restart the timer from now.
-	const onConfig = vscode.workspace.onDidChangeConfiguration((event) => {
+	const onIntervalChange = vscode.workspace.onDidChangeConfiguration((event) => {
 		if (!event.affectsConfiguration(`${CONFIG_SECTION}.refreshInterval`)) { return; }
 		if (timer) { clearTimeout(timer); timer = null; }
 		scheduleNext();
@@ -216,9 +231,9 @@ export function activate(context: vscode.ExtensionContext) {
 		if (timer) { clearTimeout(timer); timer = null; }
 		// Force a real fetch by clearing the cache, unless the API told us to
 		// wait: a manual retry during a block costs quota and extends nothing.
-		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 		const stillBlocked = !!cached?.blockedUntil && cached.blockedUntil > Date.now();
-		if (!stillBlocked) { await context.globalState.update(CACHE_KEY, undefined); }
+		if (!stillBlocked) { await context.globalState.update(cacheKey(), undefined); }
 		await refresh();
 		scheduleNext();
 	});
@@ -228,7 +243,8 @@ export function activate(context: vscode.ExtensionContext) {
 		statusBar,
 		panel,
 		onFocus,
-		onConfig,
+		onAccountChange,
+		onIntervalChange,
 		showPopup,
 		refreshCmd,
 	);

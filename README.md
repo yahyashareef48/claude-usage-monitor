@@ -51,12 +51,15 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 | `{icon} {max.name} {max.pct}` | `Fable 91%` — follows whichever window is worst |
 | `{icon} {5h.bar} {5h.pct}` | `█░░░░░░░░░ 12%` |
 | `{icon} {extra.spent} / {extra.limit}` | `$12.50 / $40.00` |
+| `{icon} {5h.pct} · {5h.reset} ({account})` | `12% · 3h 40m (you@example.com)` |
 
 Fields are `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
 
 Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown.
 
-A token naming a window your account doesn't report renders empty, and the separator it stranded is removed rather than left dangling — so `{extra.spent} / {extra.limit}` shows just `$7.00` when no monthly cap is set, and pay-as-you-go tokens disappear entirely when credits are off.
+`{account}` names the account the window is logged in as — the e-mail, read from Claude Code's own `.claude.json`, which the usage API itself never returns. `{account.user}` is the part before the @, `{account.name}` the display name and `{account.org}` the organisation. Useful when two windows watch two accounts (see [Running more than one account](#running-more-than-one-account)); the tooltip and the panel name the account either way.
+
+A token naming a window your account doesn't report renders empty, and the separator it stranded is removed rather than left dangling — so `{extra.spent} / {extra.limit}` shows just `$7.00` when no monthly cap is set, and pay-as-you-go tokens disappear entirely when credits are off. The same holds for brackets an empty token sat in: `({account})` leaves nothing behind rather than an empty `()`.
 
 The usage panel's **Settings** tab has presets, a live preview, and a checkbox per window for `claude-usage-monitor.statusBarColorFrom`, which drives the indicator from the highest of the windows you check (default: the 5-hour and 7-day windows).
 
@@ -141,8 +144,26 @@ Click the status bar item (or run **Claude: Show Usage** from the Command Palett
 All data comes from the Anthropic API — the same source Claude Code itself uses for its internal quota display. No local JSONL parsing or file watching is involved.
 
 The credentials file path follows Claude Code's own resolution logic:
-1. `$CLAUDE_CONFIG_DIR/.credentials.json` if the env var is set
-2. `~/.claude/.credentials.json` otherwise
+1. `claude-usage-monitor.configDir` if set
+2. `$CLAUDE_CONFIG_DIR/.credentials.json` if the env var is set
+3. `~/.claude/.credentials.json` otherwise
+
+On macOS, recent versions of Claude Code keep the token in the Keychain rather than in `.credentials.json`. When the file is missing, the token is read from the Keychain item Claude Code namespaces per config directory — `Claude Code-credentials-<first 8 hex of sha256(config dir)>` — falling back to the legacy unsuffixed `Claude Code-credentials` for the default directory.
+
+### Running more than one account
+
+Claude Code supports a second account through `CLAUDE_CONFIG_DIR`. That env var does not reach VS Code extensions, though — `claudeCode.environmentVariables` injects only into the Claude Code process, and `terminal.integrated.env.*` only into integrated terminals. Point the extension at the right account per window instead:
+
+```jsonc
+// .vscode/settings.json, or the user settings of a separate VS Code install
+{
+  "claude-usage-monitor.configDir": "~/.claude-work"
+}
+```
+
+Cached usage, burn-rate history and notification state are namespaced per config directory, so two windows watching two accounts stay independent. The default directory keeps the unnamespaced keys, so nothing is lost on upgrade.
+
+Each window then labels itself with the account it is reporting on: the status bar tooltip and the panel header name it, and `{account}` puts it in the status bar text itself — `12% · 3h 40m (you@work.com)`.
 
 ## Privacy
 

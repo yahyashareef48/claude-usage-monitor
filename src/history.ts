@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { UsageData } from './types';
+import { accountScopedKey } from './claudeConfig';
 import { QuotaWindow, allWindows, resetMs, sameCycle } from './windows';
 
 /**
@@ -16,7 +17,8 @@ import { QuotaWindow, allWindows, resetMs, sameCycle } from './windows';
  *   - disabling the feature deletes the key, so it costs nothing when off
  */
 
-const KEY = 'claudeUsage.history.v3';
+/** Account-scoped: two accounts must not blend into one burn-rate trend. */
+const key = () => accountScopedKey('claudeUsage.history.v3');
 
 const MAX_BUCKETS = 40;            // sparkline resolution
 const MAX_RECENT  = 30;            // raw samples kept for the rate fit
@@ -51,8 +53,16 @@ export function historyEnabled(): boolean {
 }
 
 function load(memento: vscode.Memento): Store {
-	const raw = memento.get<Store>(KEY);
+	const raw = memento.get<Store>(key());
 	return raw && raw.v === 3 && raw.windows ? raw : empty();
+}
+
+/**
+ * Drop the in-memory mirror without touching storage, so the next read reloads
+ * from whichever key is current. Used when the window switches accounts.
+ */
+export function resetHistoryCache(): void {
+	cache = null;
 }
 
 export function getStore(memento: vscode.Memento): Store {
@@ -63,7 +73,7 @@ export function getStore(memento: vscode.Memento): Store {
 
 export async function clearHistory(memento: vscode.Memento): Promise<void> {
 	cache = empty();
-	if (memento.get(KEY) !== undefined) { await memento.update(KEY, undefined); }
+	if (memento.get(key()) !== undefined) { await memento.update(key(), undefined); }
 }
 
 /** A weekly window spans ~7 days, the session window 5 hours. */
@@ -129,7 +139,7 @@ export function recordHistory(memento: vscode.Memento, data: UsageData): void {
 	}
 
 	enforceCap(store);
-	void memento.update(KEY, store);
+	void memento.update(key(), store);
 }
 
 /** How many samples exist for a window — 0 means nothing has been recorded. */

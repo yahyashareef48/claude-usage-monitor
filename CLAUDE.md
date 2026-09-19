@@ -11,6 +11,7 @@ The extension reads the OAuth token from `~/.claude/.credentials.json` (the same
 ```
 src/
   extension.ts      # Activation, polling loop (configurable interval), command registration
+  claudeConfig.ts   # Which account this window watches: config dir, Keychain account, state keys, account identity
   usageClient.ts    # Credentials reading + HTTPS call to /api/oauth/usage
   statusBar.ts      # Status bar item: "69% · 2h 14m" with color coding
   sessionPopover.ts # Webview panel with progress bars for all quota windows
@@ -58,9 +59,19 @@ The per-model quota fields (`seven_day_sonnet` etc.) went stale upstream because
 - `Authorization: Bearer <accessToken from ~/.claude/.credentials.json>`
 - `anthropic-beta: oauth-2025-04-20`
 
-**Credentials path resolution** (mirrors Claude Code's own logic):
-1. `$CLAUDE_CONFIG_DIR/.credentials.json`
-2. `~/.claude/.credentials.json`
+**Credentials path resolution** (mirrors Claude Code's own logic, plus a setting):
+1. `claude-usage-monitor.configDir` (window-scoped)
+2. `$CLAUDE_CONFIG_DIR/.credentials.json`
+3. `~/.claude/.credentials.json`
+4. macOS fallback: Keychain item `Claude Code-credentials-<first 8 hex of sha256(config dir)>`, then the legacy unsuffixed `Claude Code-credentials` — the latter only for the default directory, since trusting it for an explicit one silently reports the other account
+
+The Keychain item's `acct` attribute is the macOS user in every item, so it never distinguishes two logged-in Claude accounts. The service name is what does.
+
+The setting exists because `process.env.CLAUDE_CONFIG_DIR` is always empty in the extension host: `claudeCode.environmentVariables` injects only into the Claude Code process, `terminal.integrated.env.*` only into terminals. See `src/claudeConfig.ts`.
+
+The account's identity (e-mail, display name, organisation) is not in the usage API response — it comes from `oauthAccount` in `<config dir>/.claude.json`, read by `getAccount()` and cached against the file's mtime. Legacy `~/.claude.json` is a fallback for the default directory only, same rule as the Keychain lookup. It surfaces as the `{account}`, `{account.user}`, `{account.name}` and `{account.org}` status bar tokens, the tooltip's account line and the panel subtitle.
+
+**globalState is shared by every window of an install**, so anything derived from an account goes through `accountScopedKey()` — the usage cache, `history.ts`, `notifications.ts`. The default config dir intentionally keeps the bare key so upgrades do not orphan existing state.
 
 ## Commands
 
