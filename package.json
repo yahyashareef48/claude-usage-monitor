@@ -2,7 +2,7 @@
   "name": "claude-code-usage-tracker",
   "displayName": "Claude Code Usage Tracker",
   "description": "Real-time monitoring of Claude Code token usage, cost tracking, and session management",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "publisher": "YahyaShareef",
   "icon": "resources/icon.png",
   "repository": {
@@ -139,8 +139,8 @@
           "type": "object",
           "default": {
             "normal": "",
-            "warning": "\ud83d\udfe1",
-            "error": "\ud83d\udd34"
+            "warning": "🟡",
+            "error": "🔴"
           },
           "properties": {
             "normal": {
@@ -157,7 +157,7 @@
             }
           },
           "additionalProperties": false,
-          "markdownDescription": "Glyphs used by `emoji` mode of `#claude-usage-monitor.statusBarIndicator#`, and by the `{dot}` format token in any mode. Any text works, not just emoji. Keep the glyphs the same width or the bar will shift as the level changes — the emoji-presentation shapes (\ud83d\udfe2 \ud83d\udfe1 \ud83d\udd34 \ud83d\udfe0 \u26a0\ufe0f) are all double-width."
+          "markdownDescription": "Glyphs used by `emoji` mode of `#claude-usage-monitor.statusBarIndicator#`, and by the `{dot}` format token in any mode. Any text works, not just emoji. Keep the glyphs the same width or the bar will shift as the level changes — the emoji-presentation shapes (🟢 🟡 🔴 🟠 ⚠️) are all double-width."
         },
         "claude-usage-monitor.refreshInterval": {
           "type": "number",
