@@ -80,6 +80,26 @@ export function formatResetAbsolute(iso: string): string {
 	return d.toLocaleString();
 }
 
+/** Just the reset's time of day — `13:27`, or `Mon 13:27` when it isn't today. */
+export function formatResetClock(iso: string): string {
+	const d = new Date(iso);
+	const fmt = vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('clockFormat', 'auto');
+	const opts: Intl.DateTimeFormatOptions = { hour: 'numeric', minute: '2-digit' };
+	if (fmt !== 'auto') { opts.hour12 = fmt === '12h'; }
+	if (d.toDateString() !== new Date().toDateString()) { opts.weekday = 'short'; }
+	return d.toLocaleTimeString(undefined, opts);
+}
+
+/** The reset as the `resetDisplay` setting asks: countdown, clock time, or both. */
+export function formatReset(iso: string): string {
+	const mode = vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('resetDisplay', 'countdown');
+	if (mode === 'countdown') { return formatTimeRemaining(iso); }
+	const ms = new Date(iso).getTime() - Date.now();
+	// Past a day the countdown already reads as a weekday and time.
+	if (mode === 'clock' || ms <= 0 || ms >= 86_400_000) { return ms <= 0 ? 'resetting' : formatResetClock(iso); }
+	return `${formatTimeRemaining(iso)} (${formatResetClock(iso)})`;
+}
+
 /**
  * Every window the account currently reports. The `limits` array wins where it
  * covers a window; the legacy top-level fields only fill gaps, so an account
@@ -167,13 +187,14 @@ function miniBar(pct: number): string {
 	return '█'.repeat(filled) + '░'.repeat(10 - filled);
 }
 
-const FIELDS = ['pct', 'reset', 'resetAt', 'name', 'bar', 'spent', 'limit'] as const;
+const FIELDS = ['pct', 'reset', 'resetAt', 'resetTime', 'name', 'bar', 'spent', 'limit'] as const;
 
 function fieldValue(w: QuotaWindow, field: string): string {
 	switch (field) {
 		case 'pct':     return `${Math.round(w.pct)}%`;
 		case 'name':    return w.name;
-		case 'reset':   return w.resetsAt ? formatTimeRemaining(w.resetsAt) : '';
+		case 'reset':   return w.resetsAt ? formatReset(w.resetsAt) : '';
+		case 'resetTime': return w.resetsAt ? formatResetClock(w.resetsAt) : '';
 		case 'resetAt': return w.resetsAt ? formatResetAbsolute(w.resetsAt) : '';
 		case 'bar':     return miniBar(w.pct);
 		case 'spent':   return w.money?.spent ?? '';
