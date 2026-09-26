@@ -5,6 +5,8 @@ const https = require('https') as typeof import('https');
 import { EventEmitter } from 'events';
 import * as vscode from 'vscode';
 import { fetchUsageData, retryAtFromMessage, setUserAgent, UsageHttpError } from '../usageClient';
+import { newerData } from '../extension';
+import { UsageData } from '../types';
 
 type Fake = { status: number; headers?: Record<string, string>; body?: string };
 
@@ -77,6 +79,24 @@ suite('Rate limiting (#16 / PR #18)', () => {
 			await fetchUsageData().catch(() => undefined);
 			assert.strictEqual(s.calls[0]['User-Agent'], 'claude-usage-monitor/9.9.9');
 		} finally { s.restore(); }
+	});
+
+	test('a failed poll keeps the fresher snapshot for the shared cache', () => {
+		const snap = (at: string, pct: number): UsageData => ({
+			fiveHour: { utilization: pct, resetsAt: '2030-01-01T00:00:00Z' },
+			sevenDay: null, sevenDaySonnet: null, sevenDayOpus: null, sevenDayOauthApps: null,
+			extraUsage: null, fetchedAt: new Date(at),
+		});
+		const older = snap('2026-09-26T10:00:00Z', 10);
+		const newer = snap('2026-09-26T10:05:00Z', 12);
+		assert.strictEqual(newerData(older, newer), newer);
+		assert.strictEqual(newerData(newer, older), newer);
+		assert.strictEqual(newerData(null, older), older, 'cold window falls back to the cache');
+		assert.strictEqual(newerData(older, undefined), older, 'wiped cache falls back to memory');
+		assert.strictEqual(newerData(null, undefined), null);
+		// Revived from globalState, fetchedAt may still be an ISO string.
+		const revived = { ...newer, fetchedAt: '2026-09-26T10:05:00.000Z' as unknown as Date };
+		assert.strictEqual(newerData(older, revived), revived);
 	});
 
 	test('extension: a manual refresh during a block does not call the API again', async function () {

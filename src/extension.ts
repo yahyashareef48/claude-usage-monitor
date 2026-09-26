@@ -57,6 +57,18 @@ function reviveCache(raw: CacheEntry | undefined): CacheEntry | null {
 }
 
 /**
+ * The fresher of two snapshots. A failed poll caches this instead of null:
+ * a 429 can block for an hour, and every other window and the next session
+ * read the cache, so writing null there turned one failed poll into an hour
+ * of "Error" everywhere except the window that made the call.
+ */
+export function newerData(a: UsageData | null | undefined, b: UsageData | null | undefined): UsageData | null {
+	if (!a) { return b ?? null; }
+	if (!b) { return a; }
+	return new Date(a.fetchedAt).getTime() >= new Date(b.fetchedAt).getTime() ? a : b;
+}
+
+/**
  * Keys written by earlier versions. Bumping a key's version orphans the old
  * blob, which would otherwise sit in global storage forever.
  */
@@ -156,10 +168,11 @@ export function activate(context: vscode.ExtensionContext) {
 			const error = err instanceof Error ? err.message : String(err);
 			const retryAfterMs = err instanceof UsageHttpError ? err.retryAfterMs : null;
 			blockedUntil = retryAfterMs === null ? 0 : Date.now() + retryAfterMs;
-			const entry: CacheEntry = { data: null, error, fetchedAt: Date.now() };
+			const lastGood = newerData(currentData, cached?.data);
+			const entry: CacheEntry = { data: lastGood, error, fetchedAt: Date.now() };
 			if (blockedUntil > 0) { entry.blockedUntil = blockedUntil; }
 			await context.globalState.update(CACHE_KEY, entry);
-			applyState(null, error);
+			applyState(lastGood, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
 	}
