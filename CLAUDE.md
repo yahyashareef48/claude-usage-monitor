@@ -4,7 +4,7 @@ A VS Code extension that displays real-time Claude Code quota usage via the Anth
 
 ## How It Works
 
-The extension reads the OAuth token from `~/.claude/.credentials.json` (the same file Claude Code uses) and calls `GET https://api.anthropic.com/api/oauth/usage` on an interval (`claude-usage-monitor.refreshInterval`, default 120 s, minimum 60 s), only while a window is focused, with one cache shared across windows. No local JSONL parsing or file watching.
+The extension reads the OAuth token from `~/.claude/.credentials.json` (the same file Claude Code uses) and calls `GET https://api.anthropic.com/api/oauth/usage` on an interval (`claude-usage-monitor.refreshInterval`, default 120 s, minimum 60 s), only while a window is focused, with one cache shared across windows. Before each poll it also reads Claude Code's own saved reading (`cachedUsageUtilization` in `$CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`, legacy `<config dir>/.config.json` first) and uses whichever is newer, skipping the request when Claude Code's is fresh. Read-only, account-checked, and any surprise falls back to the API. No local JSONL parsing or file watching.
 
 ## Architecture
 

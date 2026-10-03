@@ -41,4 +41,6 @@ export interface UsageData {
 	limits?: UsageLimit[];
 	extraUsage: ExtraUsage | null;
 	fetchedAt: Date;
+	/** Who fetched it: this extension, or Claude Code (read from its saved copy). */
+	source?: 'api' | 'claude-code';
 }

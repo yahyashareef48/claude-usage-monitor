@@ -344,7 +344,9 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
     errorHtml = `<div class="banner">${lead}<br><span style="opacity:0.85">${message}</span>${hint ? `<br><span class="banner-hint">${hint}</span>` : ""}</div>`;
   }
 
-  const source = `<span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span>`;
+  const source = `<span style="opacity:0.6">${data?.source === "claude-code"
+    ? "via Claude Code's saved reading (no request)"
+    : "api.anthropic.com/api/oauth/usage"}</span>`;
   const subtitle = data ? `Updated ${timeAgo(data.fetchedAt)} · ${source}` : source;
 
   const eu = data?.extraUsage ?? null;
