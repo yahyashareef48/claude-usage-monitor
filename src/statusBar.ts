@@ -4,11 +4,13 @@ import { UsageData } from './types';
 import {
 	allWindows,
 	blockedWindow,
+	BlockedOverride,
 	colorPct,
 	formatReset,
 	IndicatorConfig,
 	Level,
 	levelOf,
+	readBlockedOverride,
 	readColorSources,
 	readIndicatorConfig,
 	readStatusBarFormat,
@@ -21,6 +23,7 @@ interface StatusBarConfig {
 	format:       string;
 	colorSources: string[];
 	ind:          IndicatorConfig;
+	blockedScope: BlockedOverride;
 }
 
 function readConfig(): StatusBarConfig {
@@ -28,6 +31,7 @@ function readConfig(): StatusBarConfig {
 		format:       readStatusBarFormat(),
 		colorSources: readColorSources(),
 		ind:          readIndicatorConfig(),
+		blockedScope: readBlockedOverride(),
 	};
 }
 
@@ -102,11 +106,13 @@ export class StatusBarManager {
 			return;
 		}
 
-		const { format, colorSources, ind } = readConfig();
+		const { format, colorSources, ind, blockedScope } = readConfig();
 
 		// Being blocked is the one state worth overriding a custom format for:
-		// the only thing that matters then is when work can resume.
-		const blocked = blockedWindow(data);
+		// the only thing that matters then is when work can resume. Users who
+		// still want their format (e.g. one model maxed, weekly budget not) can
+		// narrow or switch this off with `blockedOverride`.
+		const blocked = blockedWindow(data, blockedScope);
 		const level: Level = blocked
 			? 'error'
 			: error

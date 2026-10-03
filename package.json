@@ -73,6 +73,21 @@
           "default": "",
           "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{{`/`}}` escape braces, and a token for a window your account does not report renders empty.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
         },
+        "claude-usage-monitor.blockedOverride": {
+          "type": "string",
+          "enum": [
+            "any",
+            "account",
+            "off"
+          ],
+          "enumDescriptions": [
+            "Any exhausted window replaces the format with \"blocked · countdown\" (default)",
+            "Only the session (5h) and weekly windows do; a maxed-out model like Fable keeps your format",
+            "Never replace the format; the status bar still turns red"
+          ],
+          "default": "any",
+          "markdownDescription": "When a quota window hits 100%, the status bar sets `#claude-usage-monitor.statusBarFormat#` aside and shows `blocked · <countdown>` instead. Use `account` to ignore per-model windows (so a maxed-out Fable doesn't hide your weekly budget), or `off` to always keep your format."
+        },
         "claude-usage-monitor.statusBar": {
           "type": "string",
           "pattern": "^(5h|7d|both|model:.+)$",

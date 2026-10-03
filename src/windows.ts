@@ -161,11 +161,25 @@ function highest(windows: QuotaWindow[]): QuotaWindow | null {
 }
 
 /**
+ * Which exhausted windows may replace the status bar format with a
+ * "blocked · countdown" message: every window, only account-wide ones (so a
+ * maxed-out model doesn't hide the weekly budget), or none.
+ */
+export type BlockedOverride = 'any' | 'account' | 'off';
+
+export function readBlockedOverride(): BlockedOverride {
+	const v = vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('blockedOverride', 'any');
+	return v === 'account' || v === 'off' ? v : 'any';
+}
+
+/**
  * The exhausted window the user is most likely waiting on — soonest reset
  * first, since that is the one that decides when work can resume.
  */
-export function blockedWindow(data: UsageData): QuotaWindow | null {
-	const blocked = allWindows(data).filter((w) => w.pct >= 100);
+export function blockedWindow(data: UsageData, scope: BlockedOverride = 'any'): QuotaWindow | null {
+	if (scope === 'off') { return null; }
+	const blocked = allWindows(data).filter((w) =>
+		w.pct >= 100 && !(scope === 'account' && w.key.startsWith('model:')));
 	if (blocked.length === 0) { return null; }
 	return blocked.sort((a, b) => {
 		if (!a.resetsAt) { return 1; }
