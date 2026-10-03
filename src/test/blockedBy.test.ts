@@ -209,10 +209,18 @@ suite('Blocked takeover: Settings tab (#20)', () => {
 		assert.strictEqual(boxes(buildFragments(usage(40, 70, 100), null, empty).settingsHtml)['model:Fable'], true);
 	});
 
-	test('no data shows a hint instead of checkboxes', async () => {
-		const html = buildFragments(null, null, empty).settingsHtml;
-		assert.ok(html.includes('id="blocked-by"'));
-		assert.deepStrictEqual(boxes(html), {});
+	test('before any data (e.g. rate-limited) the 5h and 7d boxes still show', async () => {
+		await setBlockedBy(undefined);
+		const b = boxes(buildFragments(null, null, empty).settingsHtml);
+		console.log(`    [panel, no data] ${JSON.stringify(b)}`);
+		assert.deepStrictEqual(b, { '5h': true, '7d': true });
+	});
+
+	test('a configured key the account is not reporting stays visible and ticked', async () => {
+		await setBlockedBy(['5h', 'model:Gone']);
+		const html = buildFragments(usage(40, 70, 100), null, empty).settingsHtml;
+		assert.deepStrictEqual(boxes(html), { '5h': true, '7d': false, 'model:Fable': false, 'model:Gone': true });
+		assert.ok(html.includes('Gone (not reported right now)'));
 	});
 
 	test('the old At 100% dropdown is gone', async () => {
