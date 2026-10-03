@@ -173,6 +173,15 @@ suite('Blocked takeover: status bar (#20)', () => {
 		assert.ok(md.includes('Fable'), 'tooltip mentions Fable');
 		assert.ok(/100%/.test(md), 'tooltip shows 100%');
 	});
+
+	test('the tooltip names where the data came from', async () => {
+		const tipOf = () => { const t = item().tooltip; return typeof t === 'string' ? t : t?.value ?? ''; };
+		mgr.update({ ...usage(40, 70, 0), source: 'api' });
+		assert.ok(tipOf().includes('via usage API'), tipOf());
+		mgr.update({ ...usage(40, 70, 0), source: 'claude-code' });
+		console.log(`    [tooltip] ${tipOf().split('\n').pop()}`);
+		assert.ok(tipOf().includes("via Claude Code's saved reading"));
+	});
 });
 
 suite('Blocked takeover: Settings tab (#20)', () => {
@@ -221,6 +230,11 @@ suite('Blocked takeover: Settings tab (#20)', () => {
 		const html = buildFragments(usage(40, 70, 100), null, empty).settingsHtml;
 		assert.deepStrictEqual(boxes(html), { '5h': true, '7d': false, 'model:Fable': false, 'model:Gone': true });
 		assert.ok(html.includes('Gone (not reported right now)'));
+	});
+
+	test('the panel subtitle names where the data came from', () => {
+		assert.ok(buildFragments({ ...usage(40, 70, 0), source: 'api' }, null, empty).subtitle.includes('api.anthropic.com/api/oauth/usage'));
+		assert.ok(buildFragments({ ...usage(40, 70, 0), source: 'claude-code' }, null, empty).subtitle.includes("Claude Code's saved reading"));
 	});
 
 	test('the old At 100% dropdown is gone', async () => {

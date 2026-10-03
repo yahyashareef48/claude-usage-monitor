@@ -155,7 +155,8 @@ export class StatusBarManager {
 			lines.push(`⚠️ *Poll failed — showing cached data*`);
 		}
 
-		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} · Click to open panel_`);
+		const via = data.source === 'claude-code' ? "Claude Code's saved reading" : 'usage API';
+		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} via ${via} · Click to open panel_`);
 
 		const md = new vscode.MarkdownString(lines.join('\n\n'));
 		md.supportThemeIcons = true;
