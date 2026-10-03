@@ -303,7 +303,7 @@ interface PanelState {
  * is never replaced — the active tab, the scroll position, and any control the
  * user is mid-edit all survive a poll.
  */
-function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
+export function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
   const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
