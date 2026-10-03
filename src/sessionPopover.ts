@@ -1049,16 +1049,17 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 	});
 
 	// Projected times arrive as epoch ms and are formatted here, in the viewer's
-	// own timezone — the extension host may be a remote machine.
+	// own timezone — the extension host may be a remote machine. Anything past
+	// today carries its date, so a weekday alone is never ambiguous (#21).
 	function formatEtas(root) {
 		var els = root.querySelectorAll('[data-eta]');
 		for (var i = 0; i < els.length; i++) {
 			var ms = Number(els[i].getAttribute('data-eta'));
 			if (!isFinite(ms)) { continue; }
 			var d = new Date(ms);
-			els[i].textContent = (ms - Date.now() < 20 * 3600000)
+			els[i].textContent = (d.toDateString() === new Date().toDateString())
 				? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-				: d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+				: d.toLocaleString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 		}
 	}
 
