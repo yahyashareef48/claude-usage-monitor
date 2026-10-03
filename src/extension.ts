@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import { fetchUsageData, setUserAgent, UsageHttpError } from './usageClient';
+import { fetchUsageData, newest, readClaudeCodeSnapshot, setUserAgent, UsageHttpError } from './usageClient';
 import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { maybeNotify } from './notifications';
@@ -127,20 +127,36 @@ export function activate(context: vscode.ExtensionContext) {
 
 	async function refresh() {
 		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		// Claude Code saves its own reading of the same endpoint. Whichever of
+		// the two is newer is shown, and a fresh one spares us the request.
+		const snap = await readClaudeCodeSnapshot();
+		// A failure is stale once Claude Code has fetched successfully since.
+		const errorFor = (entry: CacheEntry) =>
+			snap && snap.fetchedAt.getTime() > entry.fetchedAt ? null : entry.error;
 
 		// Another window (or an earlier poll here) was told to back off. Calling
 		// anyway would count against the same account budget and keep the block
 		// alive, so show what we have and wait it out.
 		if (cached?.blockedUntil && cached.blockedUntil > Date.now()) {
 			blockedUntil = cached.blockedUntil;
-			applyState(cached.data, cached.error);
+			applyState(newest(cached.data, snap), errorFor(cached));
+			return;
+		}
+
+		if (snap && Date.now() - snap.fetchedAt.getTime() < cacheTtlMs()
+			&& (!cached || snap.fetchedAt.getTime() > cached.fetchedAt)) {
+			errorCount = 0;
+			// Shared like our own fetches, so other windows skip theirs too.
+			const entry: CacheEntry = { data: snap, error: null, fetchedAt: snap.fetchedAt.getTime() };
+			await context.globalState.update(CACHE_KEY, entry);
+			applyState(snap, null);
 			return;
 		}
 
 		// Skip the fetch if another window just did it
 		if (cached && (Date.now() - cached.fetchedAt) < cacheTtlMs()) {
 			errorCount = cached.error ? errorCount : 0;
-			applyState(cached.data, cached.error);
+			applyState(newest(cached.data, snap), errorFor(cached));
 			return;
 		}
 
@@ -156,21 +172,31 @@ export function activate(context: vscode.ExtensionContext) {
 			const error = err instanceof Error ? err.message : String(err);
 			const retryAfterMs = err instanceof UsageHttpError ? err.retryAfterMs : null;
 			blockedUntil = retryAfterMs === null ? 0 : Date.now() + retryAfterMs;
-			const entry: CacheEntry = { data: null, error, fetchedAt: Date.now() };
+			// Keep the last good reading in the shared cache: writing null here
+			// left every other (and every newly opened) window with nothing to
+			// show for the whole block, often an hour.
+			const last = newest(currentData, cached?.data, snap);
+			const entry: CacheEntry = { data: last, error, fetchedAt: Date.now() };
 			if (blockedUntil > 0) { entry.blockedUntil = blockedUntil; }
 			await context.globalState.update(CACHE_KEY, entry);
-			applyState(null, error);
+			applyState(last, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
 	}
 
-	// On startup: show whatever the shared cache holds immediately.
+	// On startup: show whatever the shared cache holds immediately, then
+	// Claude Code's saved reading if that turns out to be newer.
 	const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
 	if (cached) {
 		applyState(cached.data, cached.error);
 	} else {
 		statusBar.showInitializing();
 	}
+	void readClaudeCodeSnapshot().then((snap) => {
+		if (snap && newest(currentData, snap) === snap) {
+			applyState(snap, cached && snap.fetchedAt.getTime() > cached.fetchedAt ? null : currentError);
+		}
+	});
 
 	// Only a focused window fetches. Restoring a session opens every window at
 	// once; without this they would all fetch in the same instant, before any of

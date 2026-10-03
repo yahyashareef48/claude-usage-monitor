@@ -9,6 +9,7 @@ import {
 	IndicatorConfig,
 	Level,
 	levelOf,
+	readBlockedBy,
 	readColorSources,
 	readIndicatorConfig,
 	readStatusBarFormat,
@@ -21,6 +22,7 @@ interface StatusBarConfig {
 	format:       string;
 	colorSources: string[];
 	ind:          IndicatorConfig;
+	blockedBy:    string[];
 }
 
 function readConfig(): StatusBarConfig {
@@ -28,6 +30,7 @@ function readConfig(): StatusBarConfig {
 		format:       readStatusBarFormat(),
 		colorSources: readColorSources(),
 		ind:          readIndicatorConfig(),
+		blockedBy:    readBlockedBy(),
 	};
 }
 
@@ -102,11 +105,12 @@ export class StatusBarManager {
 			return;
 		}
 
-		const { format, colorSources, ind } = readConfig();
+		const { format, colorSources, ind, blockedBy } = readConfig();
 
 		// Being blocked is the one state worth overriding a custom format for:
-		// the only thing that matters then is when work can resume.
-		const blocked = blockedWindow(data);
+		// the only thing that matters then is when work can resume. Which
+		// windows count as blocking, and in what order, is `statusBarBlockedBy`.
+		const blocked = blockedWindow(data, blockedBy);
 		const level: Level = blocked
 			? 'error'
 			: error
@@ -151,7 +155,8 @@ export class StatusBarManager {
 			lines.push(`⚠️ *Poll failed — showing cached data*`);
 		}
 
-		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} · Click to open panel_`);
+		const via = data.source === 'claude-code' ? "Claude Code's saved reading" : 'usage API';
+		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} via ${via} · Click to open panel_`);
 
 		const md = new vscode.MarkdownString(lines.join('\n\n'));
 		md.supportThemeIcons = true;

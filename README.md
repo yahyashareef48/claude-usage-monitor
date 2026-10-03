@@ -8,7 +8,9 @@ A VS Code extension that shows your real-time Claude Code quota usage directly i
 
 The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 2 minutes by default (only when the window is focused) and displays the results without any additional login or configuration.
 
-When the API answers `HTTP 429` it also says how long to wait, and the extension waits exactly that long. The block is stored in the cache all windows share, so one window being told to back off stops the others too.
+When the API answers `HTTP 429` it also says how long to wait, and the extension waits exactly that long. The block is stored in the cache all windows share, so one window being told to back off stops the others too, and the last reading stays on screen meanwhile.
+
+Claude Code saves its own last reading of the same endpoint in its config file (`$CLAUDE_CONFIG_DIR/.claude.json`, otherwise `~/.claude.json`, on every platform). Before each poll the extension reads that file; whichever reading is newer is shown, and if Claude Code's is fresher than one interval the extension skips its own request. It never writes to the file, and a reading saved under a different account is ignored. The panel says *via Claude Code's saved reading* when that's what you're seeing.
 
 The interval is configurable with `claude-usage-monitor.refreshInterval` (seconds, minimum 60). All windows share one cache, so the interval applies per machine. If the status bar shows `HTTP 429 — Rate limited`, raise it: the usage endpoint has a small hourly budget per account, and every open VS Code window, Claude Code session and other usage tool on the machine draws from the same budget.
 
@@ -90,7 +92,9 @@ The `{dot}` format token places the glyph yourself and works in every mode, so `
 
 ### When a window runs out
 
-At 100% the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m`, or `Fable blocked · Sun 4:29 AM` for a per-model window. If several are exhausted it shows the one resetting soonest. The panel marks those bars **Exhausted — resets in …**.
+When the 5-hour or weekly window hits 100%, the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m` or `7d blocked · Sun 4:29 AM`. If both are exhausted the 5-hour one wins. A maxed-out model such as Fable doesn't take over, since the other models still work; it shows as **Exhausted — resets in …** in the tooltip and panel like any exhausted window.
+
+`claude-usage-monitor.statusBarBlockedBy` picks which windows take over, in priority order: default `["5h", "7d"]`, add `"model:Fable"` to include a model, `["*"]` for any window (soonest reset first), or `[]` to always keep your format. The bar colour still follows `statusBarColorFrom`. The panel's Settings tab has the same choice as checkboxes.
 
 ### Burn rate — beta, off by default
 

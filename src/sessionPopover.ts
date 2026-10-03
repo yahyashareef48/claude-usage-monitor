@@ -18,6 +18,7 @@ import {
   levelOf,
   limitLabel,
   presets,
+  readBlockedBy,
   readColorSources,
   readIndicatorConfig,
   readStatusBarFormat,
@@ -302,7 +303,7 @@ interface PanelState {
  * is never replaced — the active tab, the scroll position, and any control the
  * user is mid-edit all survive a poll.
  */
-function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
+export function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
   const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
@@ -343,7 +344,9 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
     errorHtml = `<div class="banner">${lead}<br><span style="opacity:0.85">${message}</span>${hint ? `<br><span class="banner-hint">${hint}</span>` : ""}</div>`;
   }
 
-  const source = `<span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span>`;
+  const source = `<span style="opacity:0.6">${data?.source === "claude-code"
+    ? "via Claude Code's saved reading (no request)"
+    : "api.anthropic.com/api/oauth/usage"}</span>`;
   const subtitle = data ? `Updated ${timeAgo(data.fetchedAt)} · ${source}` : source;
 
   const eu = data?.extraUsage ?? null;
@@ -446,6 +449,26 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
     return `<label class="check"><input type="checkbox" value="${escapeHtml(w.key)}"${checked} onchange="updateColorSources()"> ${escapeHtml(w.label)}</label>`;
   }).join("");
 
+  // Offered even before the first successful poll (e.g. while rate-limited):
+  // the session and weekly windows always exist, and a configured key the
+  // account isn't reporting right now stays visible so a click can't drop it.
+  const blockedRaw = readBlockedBy().map((s) => s.trim());
+  const blockedBy  = blockedRaw.map((s) => s.toLowerCase());
+  const blockedAll = blockedBy.includes("*");
+  const blockedOpts = windows.map((w) => ({ key: w.key, label: w.label }));
+  const offer = (key: string, label: string) => {
+    if (!blockedOpts.some((o) => o.key.toLowerCase() === key.toLowerCase())) { blockedOpts.push({ key, label }); }
+  };
+  offer("5h", "5-Hour Window");
+  offer("7d", "7-Day All Models");
+  for (const k of blockedRaw) {
+    if (k && k !== "*") { offer(k, `${k.replace(/^model:/i, "")} (not reported right now)`); }
+  }
+  const blockedBoxes = blockedOpts.map((o) => {
+    const checked = blockedAll || blockedBy.includes(o.key.toLowerCase()) ? " checked" : "";
+    return `<label class="check"><input type="checkbox" value="${escapeHtml(o.key)}"${checked} onchange="updateBlockedBy()"> ${escapeHtml(o.label)}</label>`;
+  }).join("");
+
   const windowKeys = [...windows.map((w) => `{${w.key}}`), "{max}"].join(" ");
 
   const settingsHtml = `
@@ -465,6 +488,11 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
 			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
+		</div>
+		<div class="setting-stack" id="blocked-by">
+			<span class="setting-label">Show "blocked" at 100% <span class="info-icon" title="When a checked window is exhausted, the status bar replaces your format with 'blocked · countdown'. Unchecked windows keep your format and still show as exhausted in the tooltip and panel.">ⓘ</span></span>
+			${blockedBoxes}
+			<div class="hint">If several are exhausted, the first one in this list wins. Uncheck all to always keep your format.</div>
 		</div>
 	</div>
 
@@ -1024,6 +1052,15 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 			if (boxes[i].checked) { vals.push(boxes[i].value); }
 		}
 		updateSetting('claude-usage-monitor.statusBarColorFrom', vals);
+	}
+
+	function updateBlockedBy() {
+		var boxes = document.querySelectorAll('#blocked-by input[type=checkbox]');
+		var vals  = [];
+		for (var i = 0; i < boxes.length; i++) {
+			if (boxes[i].checked) { vals.push(boxes[i].value); }
+		}
+		updateSetting('claude-usage-monitor.statusBarBlockedBy', vals);
 	}
 
 	function setTab(name) {

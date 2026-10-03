@@ -73,6 +73,17 @@
           "default": "",
           "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{{`/`}}` escape braces, and a token for a window your account does not report renders empty.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
         },
+        "claude-usage-monitor.statusBarBlockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "5h",
+            "7d"
+          ],
+          "markdownDescription": "Windows that replace `#claude-usage-monitor.statusBarFormat#` with `blocked · <countdown>` when they hit 100%. The first exhausted one in the list wins. Use window addresses: `5h`, `7d`, `extra`, `model:<display name>`, or `*` for any window (soonest reset first).\n\nBy default only the session and weekly windows do, since a maxed-out model still leaves the others usable. `[]` always keeps your format. Windows left out still show as exhausted in the tooltip and panel, and the bar colour still follows `#claude-usage-monitor.statusBarColorFrom#`.\n\nExample: `[\"5h\", \"7d\", \"model:Fable\"]`."
+        },
         "claude-usage-monitor.statusBar": {
           "type": "string",
           "pattern": "^(5h|7d|both|model:.+)$",

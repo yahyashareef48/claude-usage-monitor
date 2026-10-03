@@ -160,18 +160,44 @@ function highest(windows: QuotaWindow[]): QuotaWindow | null {
 	return windows.reduce<QuotaWindow | null>((a, b) => (!a || b.pct > a.pct ? b : a), null);
 }
 
+export const DEFAULT_BLOCKED_BY = ['5h', '7d'];
+
 /**
- * The exhausted window the user is most likely waiting on — soonest reset
- * first, since that is the one that decides when work can resume.
+ * Windows allowed to replace the status bar format with "blocked · countdown",
+ * in priority order. Only the session and weekly windows by default: with one
+ * model maxed out the others still work, so it shouldn't hide the budget.
+ * Unlike the colour sources, an empty list is meaningful — it means never.
  */
-export function blockedWindow(data: UsageData): QuotaWindow | null {
-	const blocked = allWindows(data).filter((w) => w.pct >= 100);
-	if (blocked.length === 0) { return null; }
-	return blocked.sort((a, b) => {
+export function readBlockedBy(): string[] {
+	const raw = vscode.workspace
+		.getConfiguration('claude-usage-monitor')
+		.get<unknown>('statusBarBlockedBy', DEFAULT_BLOCKED_BY);
+	return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string') : DEFAULT_BLOCKED_BY;
+}
+
+/** Soonest reset first, since that is the one that decides when work can resume. */
+function soonestReset(windows: QuotaWindow[]): QuotaWindow | null {
+	return [...windows].sort((a, b) => {
 		if (!a.resetsAt) { return 1; }
 		if (!b.resetsAt) { return -1; }
 		return new Date(a.resetsAt).getTime() - new Date(b.resetsAt).getTime();
-	})[0];
+	})[0] ?? null;
+}
+
+/**
+ * The exhausted window to show instead of the format: the first of `keys`
+ * at 100%. `*` stands for every window, soonest reset first.
+ */
+export function blockedWindow(data: UsageData, keys: string[] = DEFAULT_BLOCKED_BY): QuotaWindow | null {
+	const exhausted = allWindows(data).filter((w) => w.pct >= 100);
+	for (const key of keys) {
+		const k = key.trim().toLowerCase();
+		const hit = k === '*'
+			? soonestReset(exhausted)
+			: exhausted.find((w) => w.key.toLowerCase() === k) ?? null;
+		if (hit) { return hit; }
+	}
+	return null;
 }
 
 /** Look up one window by address. 'max' resolves to whichever is highest now. */
