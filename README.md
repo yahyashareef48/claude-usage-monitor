@@ -90,7 +90,9 @@ The `{dot}` format token places the glyph yourself and works in every mode, so `
 
 ### When a window runs out
 
-At 100% the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m`, or `Fable blocked · Sun 4:29 AM` for a per-model window. If several are exhausted it shows the one resetting soonest. The panel marks those bars **Exhausted — resets in …**. To keep your format instead, set `claude-usage-monitor.blockedOverride` to `account` (only the session and weekly windows take over, so a maxed-out model no longer hides your weekly budget) or `off` (never; the bar still turns red) — also under **At 100%** in the panel's Settings tab.
+When the 5-hour or weekly window hits 100%, the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m` or `7d blocked · Sun 4:29 AM`. If both are exhausted the 5-hour one wins. A maxed-out model such as Fable doesn't take over, since the other models still work; it shows as **Exhausted — resets in …** in the tooltip and panel like any exhausted window.
+
+`claude-usage-monitor.statusBarBlockedBy` picks which windows take over, in priority order: default `["5h", "7d"]`, add `"model:Fable"` to include a model, `["*"]` for any window (soonest reset first), or `[]` to always keep your format. The bar colour still follows `statusBarColorFrom`. The panel's Settings tab has the same choice as checkboxes.
 
 ### Burn rate — beta, off by default
 
