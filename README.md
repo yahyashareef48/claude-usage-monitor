@@ -127,6 +127,18 @@ Click the status bar item (or run **Claude: Show Usage** from the Command Palett
 - **Per-model weekly windows** — one bar per model limit the API reports (e.g. **7-Day Fable**), parsed generically so new model tiers show up automatically
 - **Extra Usage** — pay-as-you-go credits spent this month (when enabled)
 
+## Settings
+
+![Settings tab](resources/image4.png)
+
+Everything is configurable from the panel's **Settings** tab — no `settings.json` editing needed, though every control maps to a `claude-usage-monitor.*` setting if you prefer that.
+
+- **Status bar** — display presets (5-hour, 7-day, both, worst window, per model, extra usage), the raw format template, and a live preview of the result. See [Customising the text](#customising-the-text).
+- **Status bar indicator** — background, tinted text, emoji or none, with colour pickers for the theme's warning/error tokens. See [Choosing the indicator](#choosing-the-indicator).
+- **Blocked by** — a checkbox per window that may take over the status bar when it hits 100%. See [When a window runs out](#when-a-window-runs-out).
+- **Thresholds** — the warning and error percentages (default 60 / 80).
+- **Panel** — burn-rate tracking, clock format, reset display (countdown, clock time or both) and the refresh interval.
+
 ## Commands
 
 | Command | Description |
