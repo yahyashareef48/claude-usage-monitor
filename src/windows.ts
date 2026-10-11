@@ -208,21 +208,36 @@ export function resolveWindow(data: UsageData, key: string): QuotaWindow | null 
 	return windows.find((w) => w.key.toLowerCase() === k) ?? null;
 }
 
+/**
+ * The `usageDisplay` setting: quota as used (the API's own number) or as what
+ * is left. Only what is shown flips; thresholds, colours and `max` keep
+ * working on used, so existing settings never silently invert.
+ */
+export function showRemaining(): boolean {
+	return vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('usageDisplay', 'used') === 'remaining';
+}
+
+export function displayPct(pct: number): number {
+	return showRemaining() ? Math.max(0, 100 - pct) : pct;
+}
+
 function miniBar(pct: number): string {
 	const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 10);
 	return '█'.repeat(filled) + '░'.repeat(10 - filled);
 }
 
-const FIELDS = ['pct', 'reset', 'resetAt', 'resetTime', 'name', 'bar', 'spent', 'limit'] as const;
+const FIELDS = ['pct', 'used', 'left', 'reset', 'resetAt', 'resetTime', 'name', 'bar', 'spent', 'limit'] as const;
 
 function fieldValue(w: QuotaWindow, field: string): string {
 	switch (field) {
-		case 'pct':     return `${Math.round(w.pct)}%`;
+		case 'pct':     return `${Math.round(displayPct(w.pct))}%`;
+		case 'used':    return `${Math.round(w.pct)}%`;
+		case 'left':    return `${Math.round(Math.max(0, 100 - w.pct))}%`;
 		case 'name':    return w.name;
 		case 'reset':   return w.resetsAt ? formatReset(w.resetsAt) : '';
 		case 'resetTime': return w.resetsAt ? formatResetClock(w.resetsAt) : '';
 		case 'resetAt': return w.resetsAt ? formatResetAbsolute(w.resetsAt) : '';
-		case 'bar':     return miniBar(w.pct);
+		case 'bar':     return miniBar(displayPct(w.pct));
 		case 'spent':   return w.money?.spent ?? '';
 		case 'limit':   return w.money?.limit ?? '';
 		default:        return '';
