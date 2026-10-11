@@ -68,10 +68,23 @@
           "default": "countdown",
           "markdownDescription": "How reset times show in the status bar and `{….reset}` tokens."
         },
+        "claude-usage-monitor.usageDisplay": {
+          "type": "string",
+          "enum": [
+            "used",
+            "remaining"
+          ],
+          "enumDescriptions": [
+            "Share of the quota used (e.g. 12%)",
+            "Share of the quota left (e.g. 88% left)"
+          ],
+          "default": "used",
+          "markdownDescription": "Show each quota window as used or remaining, in the status bar (`{….pct}`, `{….bar}`), its tooltip and the usage panel. `remaining` pairs with the reset countdown to read as \"left · time left\". Thresholds and colours always work on used. `{….used}` and `{….left}` ignore this setting."
+        },
         "claude-usage-monitor.statusBarFormat": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{{`/`}}` escape braces, and a token for a window your account does not report renders empty.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
+          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct` (used or left, per `#claude-usage-monitor.usageDisplay#`), `.used`, `.left`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{{`/`}}` escape braces, and a token for a window your account does not report renders empty.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
         },
         "claude-usage-monitor.statusBarBlockedBy": {
           "type": "array",

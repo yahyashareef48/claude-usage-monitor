@@ -54,9 +54,11 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 | `{icon} {5h.bar} {5h.pct}` | `█░░░░░░░░░ 12%` |
 | `{icon} {extra.spent} / {extra.limit}` | `$12.50 / $40.00` |
 
-Fields are `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
+Fields are `.pct`, `.used`, `.left`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
 
 Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown.
+
+Set `claude-usage-monitor.usageDisplay` to `remaining` to show how much is left instead of how much is used, so the default reads `88% · 3h 40m` (left, and time left). It flips `.pct`, `.bar`, the tooltip and the panel bars; `.used` and `.left` always mean what they say, and thresholds and colours keep working on used.
 
 A token naming a window your account doesn't report renders empty, and the separator it stranded is removed rather than left dangling — so `{extra.spent} / {extra.limit}` shows just `$7.00` when no monthly cap is set, and pay-as-you-go tokens disappear entirely when credits are off.
 
@@ -137,7 +139,7 @@ Everything is configurable from the panel's **Settings** tab — no `settings.js
 - **Status bar indicator** — background, tinted text, emoji or none, with colour pickers for the theme's warning/error tokens. See [Choosing the indicator](#choosing-the-indicator).
 - **Blocked by** — a checkbox per window that may take over the status bar when it hits 100%. See [When a window runs out](#when-a-window-runs-out).
 - **Thresholds** — the warning and error percentages (default 60 / 80).
-- **Panel** — burn-rate tracking, clock format, reset display (countdown, clock time or both) and the refresh interval.
+- **Panel** — burn-rate tracking, clock format, reset display (countdown, clock time or both), usage shown as used or remaining, and the refresh interval.
 
 ## Commands
 

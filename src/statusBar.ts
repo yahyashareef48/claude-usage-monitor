@@ -5,6 +5,7 @@ import {
 	allWindows,
 	blockedWindow,
 	colorPct,
+	displayPct,
 	formatReset,
 	IndicatorConfig,
 	Level,
@@ -14,6 +15,7 @@ import {
 	readIndicatorConfig,
 	readStatusBarFormat,
 	renderTemplate,
+	showRemaining,
 	templateWithDot,
 	TOOLTIP_EMOJI,
 } from './windows';
@@ -129,11 +131,14 @@ export class StatusBarManager {
 		}
 		this.applyIndicator(ind, level);
 
+		// The level always comes from used; only the bar and number flip.
+		const suffix = showRemaining() ? ' left' : '';
 		const bar = (p: number) => {
-			const filled = Math.round(Math.min(p, 100) / 10);
+			const shown  = displayPct(p);
+			const filled = Math.round(Math.min(shown, 100) / 10);
 			const lvl    = levelOf(p, ind.warnT, ind.errT);
 			const color  = ind.emoji[lvl] || TOOLTIP_EMOJI[lvl];
-			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${p.toFixed(0)}% ${color}`;
+			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${shown.toFixed(0)}%${suffix} ${color}`;
 		};
 
 		const lines: string[] = [`$(claude-icon) **Claude Usage**`, `---`];

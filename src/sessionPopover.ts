@@ -14,6 +14,7 @@ import {
 import {
   allWindows,
   colorPct,
+  displayPct,
   Level,
   levelOf,
   limitLabel,
@@ -23,6 +24,7 @@ import {
   readIndicatorConfig,
   readStatusBarFormat,
   renderTemplate,
+  showRemaining,
   sortLimits,
   templateWithDot,
   tokenValues,
@@ -186,17 +188,24 @@ function resetMeta(resetsAt: string | null, pct: number): string {
     : `<span>Resets in ${left}</span>`;
 }
 
+/** The bar's number and fill per `usageDisplay`; its colour stays on used. */
+function shownPct(pct: number, digits: number): { text: string; width: number } {
+  const shown = displayPct(pct);
+  return { text: `${shown.toFixed(digits)}%${showRemaining() ? " left" : ""}`, width: Math.min(shown, 100) };
+}
+
 function bucketRow(label: string, bucket: QuotaBucket, warnT: number, errT: number, burn = ""): string {
   const pct = bucket.utilization;
   const color = barColor(pct, warnT, errT);
   const resetsDate = formatResetDate(bucket.resetsAt);
+  const shown = shownPct(pct, 1);
   return `
 			<div class="bucket">
 				<div class="bucket-header">
 					<span class="bucket-label">${label}</span>
-					<span class="bucket-pct" style="color:${color}">${pct.toFixed(1)}%</span>
+					<span class="bucket-pct" style="color:${color}">${shown.text}</span>
 				</div>
-				<div class="progress"><div class="fill" style="width:${Math.min(pct, 100)}%;background:${color}"></div></div>
+				<div class="progress"><div class="fill" style="width:${shown.width}%;background:${color}"></div></div>
 				<div class="bucket-meta">
 					${resetMeta(bucket.resetsAt, pct)}
 					<span>${resetsDate}</span>
@@ -219,13 +228,14 @@ function limitRow(l: UsageLimit, warnT: number, errT: number, burn = ""): string
   const sColor = severityColor(l.severity);
   const color = sColor && rank(sColor) > rank(tColor) ? sColor : tColor;
   const meta = `${resetMeta(l.resetsAt, pct)}<span>${l.resetsAt ? formatResetDate(l.resetsAt) : ""}</span>`;
+  const shown = shownPct(pct, 0);
   return `
 			<div class="bucket">
 				<div class="bucket-header">
 					<span class="bucket-label">${escapeHtml(limitLabel(l))}</span>
-					<span class="bucket-pct" style="color:${color}">${pct.toFixed(0)}%</span>
+					<span class="bucket-pct" style="color:${color}">${shown.text}</span>
 				</div>
-				<div class="progress"><div class="fill" style="width:${Math.min(pct, 100)}%;background:${color}"></div></div>
+				<div class="progress"><div class="fill" style="width:${shown.width}%;background:${color}"></div></div>
 				<div class="bucket-meta">${meta}</div>${burn}
 			</div>`;
 }
@@ -282,6 +292,7 @@ function readPanelConfig() {
     errT:     cfg.get<number>('errorThreshold', 80),
     clockFmt: cfg.get<string>('clockFormat', 'auto'),
     resetDisp: cfg.get<string>('resetDisplay', 'countdown'),
+    usageDisp: cfg.get<string>('usageDisplay', 'used'),
     refreshS: cfg.get<number>('refreshInterval', 120),
   };
 }
@@ -304,7 +315,7 @@ interface PanelState {
  * user is mid-edit all survive a poll.
  */
 export function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
-  const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
+  const { warnT, errT, clockFmt, resetDisp, usageDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
   const burnByKey = new Map<string, string>();
@@ -487,7 +498,7 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .used .left .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
 		</div>
 		<div class="setting-stack" id="blocked-by">
 			<span class="setting-label">Show "blocked" at 100% <span class="info-icon" title="When a checked window is exhausted, the status bar replaces your format with 'blocked · countdown'. Unchecked windows keep your format and still show as exhausted in the tooltip and panel.">ⓘ</span></span>
@@ -569,6 +580,13 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
 				<option value="countdown"${sel(resetDisp, 'countdown')}>Countdown (3h 37m)</option>
 				<option value="clock"${sel(resetDisp, 'clock')}>Clock time (13:27)</option>
 				<option value="both"${sel(resetDisp, 'both')}>Both (3h 37m (13:27))</option>
+			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Show usage as <span class="info-icon" title="Show each window as the share used or the share left, everywhere {…pct} and the bars appear. Thresholds and colours always work on used.">ⓘ</span></span>
+			<select class="setting-control" onchange="updateSetting('claude-usage-monitor.usageDisplay', this.value)">
+				<option value="used"${sel(usageDisp, 'used')}>Used (12%)</option>
+				<option value="remaining"${sel(usageDisp, 'remaining')}>Remaining (88% left)</option>
 			</select>
 		</div>
 		<div class="setting-row">
