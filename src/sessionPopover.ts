@@ -15,14 +15,17 @@ import {
 import {
   allWindows,
   colorPct,
+  displayPct,
   Level,
   levelOf,
   limitLabel,
   presets,
+  readBlockedBy,
   readColorSources,
   readIndicatorConfig,
   readStatusBarFormat,
   renderTemplate,
+  showRemaining,
   sortLimits,
   templateWithDot,
   tokenValues,
@@ -186,17 +189,24 @@ function resetMeta(resetsAt: string | null, pct: number): string {
     : `<span>Resets in ${left}</span>`;
 }
 
+/** The bar's number and fill per `usageDisplay`; its colour stays on used. */
+function shownPct(pct: number, digits: number): { text: string; width: number } {
+  const shown = displayPct(pct);
+  return { text: `${shown.toFixed(digits)}%${showRemaining() ? " left" : ""}`, width: Math.min(shown, 100) };
+}
+
 function bucketRow(label: string, bucket: QuotaBucket, warnT: number, errT: number, burn = ""): string {
   const pct = bucket.utilization;
   const color = barColor(pct, warnT, errT);
   const resetsDate = formatResetDate(bucket.resetsAt);
+  const shown = shownPct(pct, 1);
   return `
 			<div class="bucket">
 				<div class="bucket-header">
 					<span class="bucket-label">${label}</span>
-					<span class="bucket-pct" style="color:${color}">${pct.toFixed(1)}%</span>
+					<span class="bucket-pct" style="color:${color}">${shown.text}</span>
 				</div>
-				<div class="progress"><div class="fill" style="width:${Math.min(pct, 100)}%;background:${color}"></div></div>
+				<div class="progress"><div class="fill" style="width:${shown.width}%;background:${color}"></div></div>
 				<div class="bucket-meta">
 					${resetMeta(bucket.resetsAt, pct)}
 					<span>${resetsDate}</span>
@@ -219,13 +229,14 @@ function limitRow(l: UsageLimit, warnT: number, errT: number, burn = ""): string
   const sColor = severityColor(l.severity);
   const color = sColor && rank(sColor) > rank(tColor) ? sColor : tColor;
   const meta = `${resetMeta(l.resetsAt, pct)}<span>${l.resetsAt ? formatResetDate(l.resetsAt) : ""}</span>`;
+  const shown = shownPct(pct, 0);
   return `
 			<div class="bucket">
 				<div class="bucket-header">
 					<span class="bucket-label">${escapeHtml(limitLabel(l))}</span>
-					<span class="bucket-pct" style="color:${color}">${pct.toFixed(0)}%</span>
+					<span class="bucket-pct" style="color:${color}">${shown.text}</span>
 				</div>
-				<div class="progress"><div class="fill" style="width:${Math.min(pct, 100)}%;background:${color}"></div></div>
+				<div class="progress"><div class="fill" style="width:${shown.width}%;background:${color}"></div></div>
 				<div class="bucket-meta">${meta}</div>${burn}
 			</div>`;
 }
@@ -282,6 +293,7 @@ function readPanelConfig() {
     errT:     cfg.get<number>('errorThreshold', 80),
     clockFmt: cfg.get<string>('clockFormat', 'auto'),
     resetDisp: cfg.get<string>('resetDisplay', 'countdown'),
+    usageDisp: cfg.get<string>('usageDisplay', 'used'),
     refreshS: cfg.get<number>('refreshInterval', 120),
   };
 }
@@ -303,8 +315,8 @@ interface PanelState {
  * is never replaced — the active tab, the scroll position, and any control the
  * user is mid-edit all survive a poll.
  */
-function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
-  const { warnT, errT, clockFmt, resetDisp, refreshS } = readPanelConfig();
+export function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
+  const { warnT, errT, clockFmt, resetDisp, usageDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
   const burnByKey = new Map<string, string>();
@@ -344,7 +356,9 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
     errorHtml = `<div class="banner">${lead}<br><span style="opacity:0.85">${message}</span>${hint ? `<br><span class="banner-hint">${hint}</span>` : ""}</div>`;
   }
 
-  const source  = `<span style="opacity:0.6">api.anthropic.com/api/oauth/usage</span>`;
+  const source = `<span style="opacity:0.6">${data?.source === "claude-code"
+    ? "via Claude Code's saved reading (no request)"
+    : "api.anthropic.com/api/oauth/usage"}</span>`;
   // Name the account: two panels on two accounts are otherwise identical.
   const account = getAccount()?.email;
   const subtitle = [
@@ -453,6 +467,26 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
     return `<label class="check"><input type="checkbox" value="${escapeHtml(w.key)}"${checked} onchange="updateColorSources()"> ${escapeHtml(w.label)}</label>`;
   }).join("");
 
+  // Offered even before the first successful poll (e.g. while rate-limited):
+  // the session and weekly windows always exist, and a configured key the
+  // account isn't reporting right now stays visible so a click can't drop it.
+  const blockedRaw = readBlockedBy().map((s) => s.trim());
+  const blockedBy  = blockedRaw.map((s) => s.toLowerCase());
+  const blockedAll = blockedBy.includes("*");
+  const blockedOpts = windows.map((w) => ({ key: w.key, label: w.label }));
+  const offer = (key: string, label: string) => {
+    if (!blockedOpts.some((o) => o.key.toLowerCase() === key.toLowerCase())) { blockedOpts.push({ key, label }); }
+  };
+  offer("5h", "5-Hour Window");
+  offer("7d", "7-Day All Models");
+  for (const k of blockedRaw) {
+    if (k && k !== "*") { offer(k, `${k.replace(/^model:/i, "")} (not reported right now)`); }
+  }
+  const blockedBoxes = blockedOpts.map((o) => {
+    const checked = blockedAll || blockedBy.includes(o.key.toLowerCase()) ? " checked" : "";
+    return `<label class="check"><input type="checkbox" value="${escapeHtml(o.key)}"${checked} onchange="updateBlockedBy()"> ${escapeHtml(o.label)}</label>`;
+  }).join("");
+
   const windowKeys = [...windows.map((w) => `{${w.key}}`), "{max}"].join(" ");
 
   const settingsHtml = `
@@ -471,7 +505,12 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .used .left .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
+		</div>
+		<div class="setting-stack" id="blocked-by">
+			<span class="setting-label">Show "blocked" at 100% <span class="info-icon" title="When a checked window is exhausted, the status bar replaces your format with 'blocked · countdown'. Unchecked windows keep your format and still show as exhausted in the tooltip and panel.">ⓘ</span></span>
+			${blockedBoxes}
+			<div class="hint">If several are exhausted, the first one in this list wins. Uncheck all to always keep your format.</div>
 		</div>
 	</div>
 
@@ -548,6 +587,13 @@ function buildFragments(data: UsageData | null, error: string | null, store: His
 				<option value="countdown"${sel(resetDisp, 'countdown')}>Countdown (3h 37m)</option>
 				<option value="clock"${sel(resetDisp, 'clock')}>Clock time (13:27)</option>
 				<option value="both"${sel(resetDisp, 'both')}>Both (3h 37m (13:27))</option>
+			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Show usage as <span class="info-icon" title="Show each window as the share used or the share left, everywhere {…pct} and the bars appear. Thresholds and colours always work on used.">ⓘ</span></span>
+			<select class="setting-control" onchange="updateSetting('claude-usage-monitor.usageDisplay', this.value)">
+				<option value="used"${sel(usageDisp, 'used')}>Used (12%)</option>
+				<option value="remaining"${sel(usageDisp, 'remaining')}>Remaining (88% left)</option>
 			</select>
 		</div>
 		<div class="setting-row">
@@ -1033,6 +1079,15 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 		updateSetting('claude-usage-monitor.statusBarColorFrom', vals);
 	}
 
+	function updateBlockedBy() {
+		var boxes = document.querySelectorAll('#blocked-by input[type=checkbox]');
+		var vals  = [];
+		for (var i = 0; i < boxes.length; i++) {
+			if (boxes[i].checked) { vals.push(boxes[i].value); }
+		}
+		updateSetting('claude-usage-monitor.statusBarBlockedBy', vals);
+	}
+
 	function setTab(name) {
 		for (var i = 0; i < TABS.length; i++) {
 			var t  = TABS[i];
@@ -1056,16 +1111,17 @@ hr { border: none; border-top: 1px solid var(--vscode-panel-border); margin: 16p
 	});
 
 	// Projected times arrive as epoch ms and are formatted here, in the viewer's
-	// own timezone — the extension host may be a remote machine.
+	// own timezone — the extension host may be a remote machine. Anything past
+	// today carries its date, so a weekday alone is never ambiguous (#21).
 	function formatEtas(root) {
 		var els = root.querySelectorAll('[data-eta]');
 		for (var i = 0; i < els.length; i++) {
 			var ms = Number(els[i].getAttribute('data-eta'));
 			if (!isFinite(ms)) { continue; }
 			var d = new Date(ms);
-			els[i].textContent = (ms - Date.now() < 20 * 3600000)
+			els[i].textContent = (d.toDateString() === new Date().toDateString())
 				? d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
-				: d.toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+				: d.toLocaleString(undefined, { weekday: 'short', month: 'numeric', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 		}
 	}
 

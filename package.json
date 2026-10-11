@@ -2,7 +2,7 @@
   "name": "claude-code-usage-tracker",
   "displayName": "Claude Code Usage Tracker",
   "description": "Real-time monitoring of Claude Code token usage, cost tracking, and session management",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "publisher": "YahyaShareef",
   "icon": "resources/icon.png",
   "repository": {
@@ -74,10 +74,34 @@
           "default": "countdown",
           "markdownDescription": "How reset times show in the status bar and `{….reset}` tokens."
         },
+        "claude-usage-monitor.usageDisplay": {
+          "type": "string",
+          "enum": [
+            "used",
+            "remaining"
+          ],
+          "enumDescriptions": [
+            "Share of the quota used (e.g. 12%)",
+            "Share of the quota left (e.g. 88% left)"
+          ],
+          "default": "used",
+          "markdownDescription": "Show each quota window as used or remaining, in the status bar (`{….pct}`, `{….bar}`), its tooltip and the usage panel. `remaining` pairs with the reset countdown to read as \"left · time left\". Thresholds and colours always work on used. `{….used}` and `{….left}` ignore this setting."
+        },
         "claude-usage-monitor.statusBarFormat": {
           "type": "string",
           "default": "",
-          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark. `{account}` is the e-mail of the account this window is logged in as, with `{account.user}` (before the @), `{account.name}` and `{account.org}` as variants. `{{`/`}}` escape braces, and a token that cannot be resolved renders empty — along with the brackets it sat in, so `({account})` leaves nothing behind rather than an empty `()`.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n- `{icon} {5h.pct} · {5h.reset} ({account})` → `12% · 3h 40m (you@example.com)`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
+          "markdownDescription": "Template for the status bar text. Windows are addressed as `{5h.…}`, `{7d.…}`, `{extra.…}` (pay-as-you-go), `{max.…}` (whichever is highest right now) or `{model:<display name>.…}` (e.g. `{model:Fable.pct}`). Fields: `.pct` (used or left, per `#claude-usage-monitor.usageDisplay#`), `.used`, `.left`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name`, `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark. `{account}` is the e-mail of the account this window is logged in as, with `{account.user}` (before the @), `{account.name}` and `{account.org}` as variants. `{{`/`}}` escape braces, and a token that cannot be resolved renders empty — along with the brackets it sat in, so `({account})` leaves nothing behind rather than an empty `()`.\n\nExamples:\n- `{icon} {5h.pct} · {5h.reset}` → `12% · 3h 40m`\n- `{icon} {max.name} {max.pct}` → follows whichever window is worst\n- `{icon} {extra.spent} / {extra.limit}` → `$12.50 / $40.00`\n- `{icon} {5h.pct} · {5h.reset} ({account})` → `12% · 3h 40m (you@example.com)`\n\nLeave empty to follow `#claude-usage-monitor.statusBar#`. The usage panel's Settings tab has presets and a live preview."
+        },
+        "claude-usage-monitor.statusBarBlockedBy": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [
+            "5h",
+            "7d"
+          ],
+          "markdownDescription": "Windows that replace `#claude-usage-monitor.statusBarFormat#` with `blocked · <countdown>` when they hit 100%. The first exhausted one in the list wins. Use window addresses: `5h`, `7d`, `extra`, `model:<display name>`, or `*` for any window (soonest reset first).\n\nBy default only the session and weekly windows do, since a maxed-out model still leaves the others usable. `[]` always keeps your format. Windows left out still show as exhausted in the tooltip and panel, and the bar colour still follows `#claude-usage-monitor.statusBarColorFrom#`.\n\nExample: `[\"5h\", \"7d\", \"model:Fable\"]`."
         },
         "claude-usage-monitor.statusBar": {
           "type": "string",
@@ -145,8 +169,8 @@
           "type": "object",
           "default": {
             "normal": "",
-            "warning": "\ud83d\udfe1",
-            "error": "\ud83d\udd34"
+            "warning": "🟡",
+            "error": "🔴"
           },
           "properties": {
             "normal": {
@@ -163,7 +187,7 @@
             }
           },
           "additionalProperties": false,
-          "markdownDescription": "Glyphs used by `emoji` mode of `#claude-usage-monitor.statusBarIndicator#`, and by the `{dot}` format token in any mode. Any text works, not just emoji. Keep the glyphs the same width or the bar will shift as the level changes — the emoji-presentation shapes (\ud83d\udfe2 \ud83d\udfe1 \ud83d\udd34 \ud83d\udfe0 \u26a0\ufe0f) are all double-width."
+          "markdownDescription": "Glyphs used by `emoji` mode of `#claude-usage-monitor.statusBarIndicator#`, and by the `{dot}` format token in any mode. Any text works, not just emoji. Keep the glyphs the same width or the bar will shift as the level changes — the emoji-presentation shapes (🟢 🟡 🔴 🟠 ⚠️) are all double-width."
         },
         "claude-usage-monitor.refreshInterval": {
           "type": "number",

@@ -6,14 +6,17 @@ import {
 	allWindows,
 	blockedWindow,
 	colorPct,
+	displayPct,
 	formatReset,
 	IndicatorConfig,
 	Level,
 	levelOf,
+	readBlockedBy,
 	readColorSources,
 	readIndicatorConfig,
 	readStatusBarFormat,
 	renderTemplate,
+	showRemaining,
 	templateWithDot,
 	TOOLTIP_EMOJI,
 } from './windows';
@@ -22,6 +25,7 @@ interface StatusBarConfig {
 	format:       string;
 	colorSources: string[];
 	ind:          IndicatorConfig;
+	blockedBy:    string[];
 }
 
 function readConfig(): StatusBarConfig {
@@ -29,6 +33,7 @@ function readConfig(): StatusBarConfig {
 		format:       readStatusBarFormat(),
 		colorSources: readColorSources(),
 		ind:          readIndicatorConfig(),
+		blockedBy:    readBlockedBy(),
 	};
 }
 
@@ -103,11 +108,12 @@ export class StatusBarManager {
 			return;
 		}
 
-		const { format, colorSources, ind } = readConfig();
+		const { format, colorSources, ind, blockedBy } = readConfig();
 
 		// Being blocked is the one state worth overriding a custom format for:
-		// the only thing that matters then is when work can resume.
-		const blocked = blockedWindow(data);
+		// the only thing that matters then is when work can resume. Which
+		// windows count as blocking, and in what order, is `statusBarBlockedBy`.
+		const blocked = blockedWindow(data, blockedBy);
 		const level: Level = blocked
 			? 'error'
 			: error
@@ -126,11 +132,14 @@ export class StatusBarManager {
 		}
 		this.applyIndicator(ind, level);
 
+		// The level always comes from used; only the bar and number flip.
+		const suffix = showRemaining() ? ' left' : '';
 		const bar = (p: number) => {
-			const filled = Math.round(Math.min(p, 100) / 10);
+			const shown  = displayPct(p);
+			const filled = Math.round(Math.min(shown, 100) / 10);
 			const lvl    = levelOf(p, ind.warnT, ind.errT);
 			const color  = ind.emoji[lvl] || TOOLTIP_EMOJI[lvl];
-			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${p.toFixed(0)}% ${color}`;
+			return `[${('█'.repeat(filled)).padEnd(10, '—')}] ${shown.toFixed(0)}%${suffix} ${color}`;
 		};
 
 		const lines: string[] = [`$(claude-icon) **Claude Usage**`];
@@ -165,7 +174,8 @@ export class StatusBarManager {
 			lines.push(`⚠️ *Poll failed — showing cached data*`);
 		}
 
-		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} · Click to open panel_`);
+		const via = data.source === 'claude-code' ? "Claude Code's saved reading" : 'usage API';
+		lines.push(`---\n_Updated ${timeAgo(data.fetchedAt)} via ${via} · Click to open panel_`);
 
 		const md = new vscode.MarkdownString(lines.join('\n\n'));
 		md.supportThemeIcons = true;

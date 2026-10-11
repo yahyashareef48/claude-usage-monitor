@@ -28,6 +28,11 @@ export function getClaudeConfigDir(): string {
 	return defaultConfigDir();
 }
 
+/** True when the directory came from the setting or the env var, not the ~/.claude default. */
+export function isConfigDirExplicit(): boolean {
+	return !!(cfg().get<string>('configDir', '').trim() || process.env.CLAUDE_CONFIG_DIR);
+}
+
 const KEYCHAIN_SERVICE = 'Claude Code-credentials';
 
 /**

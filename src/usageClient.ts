@@ -1,9 +1,10 @@
 import * as fs from 'fs';
+import * as os from 'os';
 import * as path from 'path';
 import * as https from 'https';
 import { execFileSync } from 'child_process';
 import { QuotaBucket, UsageData, UsageLimit } from './types';
-import { getClaudeConfigDir, getKeychainServices } from './claudeConfig';
+import { getClaudeConfigDir, getKeychainServices, isConfigDirExplicit } from './claudeConfig';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const CLIENT_NAME = 'claude-usage-monitor';
@@ -235,6 +236,54 @@ export async function fetchUsageData(): Promise<UsageData> {
 		throw new Error(`API error: ${raw.error?.message ?? JSON.stringify(raw.error)}`);
 	}
 
+	return parseUsageBody(raw, new Date(), 'api');
+}
+
+/**
+ * Claude Code's global config file, resolved the way Claude Code itself does
+ * on every platform: a legacy `<config dir>/.config.json` wins if it exists,
+ * otherwise `.claude.json` in an explicit config dir (the `configDir` setting
+ * or CLAUDE_CONFIG_DIR), or in the home directory. Following the setting here
+ * matters: the home-directory file belongs to the default account, and its
+ * account check passes against itself, so a second-account window would
+ * otherwise show the first account's numbers.
+ */
+function claudeCodeConfigPath(): string {
+	const dir = getClaudeConfigDir();
+	const legacy = path.join(dir, '.config.json');
+	if (fs.existsSync(legacy)) { return legacy; }
+	return path.join(isConfigDirExplicit() ? dir : os.homedir(), '.claude.json');
+}
+
+/**
+ * The last usage reading Claude Code saved for itself (`cachedUsageUtilization`
+ * in its global config). It is the same /api/oauth/usage body we fetch, so it
+ * costs no request. An internal field: anything unexpected yields null and the
+ * caller carries on with its own fetches. A reading saved under a different
+ * account than the one now logged in is ignored.
+ */
+export async function readClaudeCodeSnapshot(): Promise<UsageData | null> {
+	try {
+		const config = JSON.parse(await fs.promises.readFile(claudeCodeConfigPath(), 'utf-8'));
+		const snap = config?.cachedUsageUtilization;
+		const at = snap?.fetchedAtMs;
+		if (typeof at !== 'number' || !isFinite(at) || !snap.utilization || typeof snap.utilization !== 'object') { return null; }
+		const account = config?.oauthAccount?.accountUuid;
+		if (snap.accountUuid && account && snap.accountUuid !== account) { return null; }
+		// A clock-skewed future time would otherwise beat every real fetch.
+		return parseUsageBody(snap.utilization, new Date(Math.min(at, Date.now())), 'claude-code');
+	} catch {
+		return null;
+	}
+}
+
+/** The most recently fetched of several readings. */
+export function newest(...readings: (UsageData | null | undefined)[]): UsageData | null {
+	return readings.reduce<UsageData | null>(
+		(a, b) => (b && (!a || b.fetchedAt.getTime() > a.fetchedAt.getTime()) ? b : a), null);
+}
+
+function parseUsageBody(raw: any, fetchedAt: Date, source: UsageData['source']): UsageData {
 	const limits = parseLimits(raw.limits);
 
 	return {
@@ -253,6 +302,7 @@ export async function fetchUsageData(): Promise<UsageData> {
 				currency: raw.extra_usage.currency ?? null,
 			}
 			: null,
-		fetchedAt: new Date(),
+		fetchedAt,
+		source,
 	};
 }

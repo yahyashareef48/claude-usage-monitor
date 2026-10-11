@@ -161,18 +161,44 @@ function highest(windows: QuotaWindow[]): QuotaWindow | null {
 	return windows.reduce<QuotaWindow | null>((a, b) => (!a || b.pct > a.pct ? b : a), null);
 }
 
+export const DEFAULT_BLOCKED_BY = ['5h', '7d'];
+
 /**
- * The exhausted window the user is most likely waiting on — soonest reset
- * first, since that is the one that decides when work can resume.
+ * Windows allowed to replace the status bar format with "blocked · countdown",
+ * in priority order. Only the session and weekly windows by default: with one
+ * model maxed out the others still work, so it shouldn't hide the budget.
+ * Unlike the colour sources, an empty list is meaningful — it means never.
  */
-export function blockedWindow(data: UsageData): QuotaWindow | null {
-	const blocked = allWindows(data).filter((w) => w.pct >= 100);
-	if (blocked.length === 0) { return null; }
-	return blocked.sort((a, b) => {
+export function readBlockedBy(): string[] {
+	const raw = vscode.workspace
+		.getConfiguration('claude-usage-monitor')
+		.get<unknown>('statusBarBlockedBy', DEFAULT_BLOCKED_BY);
+	return Array.isArray(raw) ? raw.filter((k): k is string => typeof k === 'string') : DEFAULT_BLOCKED_BY;
+}
+
+/** Soonest reset first, since that is the one that decides when work can resume. */
+function soonestReset(windows: QuotaWindow[]): QuotaWindow | null {
+	return [...windows].sort((a, b) => {
 		if (!a.resetsAt) { return 1; }
 		if (!b.resetsAt) { return -1; }
 		return new Date(a.resetsAt).getTime() - new Date(b.resetsAt).getTime();
-	})[0];
+	})[0] ?? null;
+}
+
+/**
+ * The exhausted window to show instead of the format: the first of `keys`
+ * at 100%. `*` stands for every window, soonest reset first.
+ */
+export function blockedWindow(data: UsageData, keys: string[] = DEFAULT_BLOCKED_BY): QuotaWindow | null {
+	const exhausted = allWindows(data).filter((w) => w.pct >= 100);
+	for (const key of keys) {
+		const k = key.trim().toLowerCase();
+		const hit = k === '*'
+			? soonestReset(exhausted)
+			: exhausted.find((w) => w.key.toLowerCase() === k) ?? null;
+		if (hit) { return hit; }
+	}
+	return null;
 }
 
 /** Look up one window by address. 'max' resolves to whichever is highest now. */
@@ -183,21 +209,36 @@ export function resolveWindow(data: UsageData, key: string): QuotaWindow | null 
 	return windows.find((w) => w.key.toLowerCase() === k) ?? null;
 }
 
+/**
+ * The `usageDisplay` setting: quota as used (the API's own number) or as what
+ * is left. Only what is shown flips; thresholds, colours and `max` keep
+ * working on used, so existing settings never silently invert.
+ */
+export function showRemaining(): boolean {
+	return vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('usageDisplay', 'used') === 'remaining';
+}
+
+export function displayPct(pct: number): number {
+	return showRemaining() ? Math.max(0, 100 - pct) : pct;
+}
+
 function miniBar(pct: number): string {
 	const filled = Math.round(Math.min(Math.max(pct, 0), 100) / 10);
 	return '█'.repeat(filled) + '░'.repeat(10 - filled);
 }
 
-const FIELDS = ['pct', 'reset', 'resetAt', 'resetTime', 'name', 'bar', 'spent', 'limit'] as const;
+const FIELDS = ['pct', 'used', 'left', 'reset', 'resetAt', 'resetTime', 'name', 'bar', 'spent', 'limit'] as const;
 
 function fieldValue(w: QuotaWindow, field: string): string {
 	switch (field) {
-		case 'pct':     return `${Math.round(w.pct)}%`;
+		case 'pct':     return `${Math.round(displayPct(w.pct))}%`;
+		case 'used':    return `${Math.round(w.pct)}%`;
+		case 'left':    return `${Math.round(Math.max(0, 100 - w.pct))}%`;
 		case 'name':    return w.name;
 		case 'reset':   return w.resetsAt ? formatReset(w.resetsAt) : '';
 		case 'resetTime': return w.resetsAt ? formatResetClock(w.resetsAt) : '';
 		case 'resetAt': return w.resetsAt ? formatResetAbsolute(w.resetsAt) : '';
-		case 'bar':     return miniBar(w.pct);
+		case 'bar':     return miniBar(displayPct(w.pct));
 		case 'spent':   return w.money?.spent ?? '';
 		case 'limit':   return w.money?.limit ?? '';
 		default:        return '';

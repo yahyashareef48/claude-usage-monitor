@@ -8,7 +8,9 @@ A VS Code extension that shows your real-time Claude Code quota usage directly i
 
 The extension authenticates using the OAuth token that Claude Code already stores locally at `~/.claude/.credentials.json`. It polls `GET https://api.anthropic.com/api/oauth/usage` every 2 minutes by default (only when the window is focused) and displays the results without any additional login or configuration.
 
-When the API answers `HTTP 429` it also says how long to wait, and the extension waits exactly that long. The block is stored in the cache all windows share, so one window being told to back off stops the others too.
+When the API answers `HTTP 429` it also says how long to wait, and the extension waits exactly that long. The block is stored in the cache all windows share, so one window being told to back off stops the others too, and the last reading stays on screen meanwhile.
+
+Claude Code saves its own last reading of the same endpoint in its config file (`$CLAUDE_CONFIG_DIR/.claude.json`, otherwise `~/.claude.json`, on every platform). Before each poll the extension reads that file; whichever reading is newer is shown, and if Claude Code's is fresher than one interval the extension skips its own request. It never writes to the file, and a reading saved under a different account is ignored. The panel says *via Claude Code's saved reading* when that's what you're seeing.
 
 The interval is configurable with `claude-usage-monitor.refreshInterval` (seconds, minimum 60). All windows share one cache, so the interval applies per machine. If the status bar shows `HTTP 429 — Rate limited`, raise it: the usage endpoint has a small hourly budget per account, and every open VS Code window, Claude Code session and other usage tool on the machine draws from the same budget.
 
@@ -53,9 +55,11 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 | `{icon} {extra.spent} / {extra.limit}` | `$12.50 / $40.00` |
 | `{icon} {5h.pct} · {5h.reset} ({account})` | `12% · 3h 40m (you@example.com)` |
 
-Fields are `.pct`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
+Fields are `.pct`, `.used`, `.left`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
 
 Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown.
+
+Set `claude-usage-monitor.usageDisplay` to `remaining` to show how much is left instead of how much is used, so the default reads `88% · 3h 40m` (left, and time left). It flips `.pct`, `.bar`, the tooltip and the panel bars; `.used` and `.left` always mean what they say, and thresholds and colours keep working on used.
 
 `{account}` names the account the window is logged in as — the e-mail, read from Claude Code's own `.claude.json`, which the usage API itself never returns. `{account.user}` is the part before the @, `{account.name}` the display name and `{account.org}` the organisation. Useful when two windows watch two accounts (see [Running more than one account](#running-more-than-one-account)); the tooltip and the panel name the account either way.
 
@@ -93,7 +97,9 @@ The `{dot}` format token places the glyph yourself and works in every mode, so `
 
 ### When a window runs out
 
-At 100% the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m`, or `Fable blocked · Sun 4:29 AM` for a per-model window. If several are exhausted it shows the one resetting soonest. The panel marks those bars **Exhausted — resets in …**.
+When the 5-hour or weekly window hits 100%, the format is set aside — the only thing that matters then is when you can resume — and the status bar reads `blocked · 47m` or `7d blocked · Sun 4:29 AM`. If both are exhausted the 5-hour one wins. A maxed-out model such as Fable doesn't take over, since the other models still work; it shows as **Exhausted — resets in …** in the tooltip and panel like any exhausted window.
+
+`claude-usage-monitor.statusBarBlockedBy` picks which windows take over, in priority order: default `["5h", "7d"]`, add `"model:Fable"` to include a model, `["*"]` for any window (soonest reset first), or `[]` to always keep your format. The bar colour still follows `statusBarColorFrom`. The panel's Settings tab has the same choice as checkboxes.
 
 ### Burn rate — beta, off by default
 
@@ -125,6 +131,18 @@ Click the status bar item (or run **Claude: Show Usage** from the Command Palett
 - **7-Day All Models** — weekly quota utilization
 - **Per-model weekly windows** — one bar per model limit the API reports (e.g. **7-Day Fable**), parsed generically so new model tiers show up automatically
 - **Extra Usage** — pay-as-you-go credits spent this month (when enabled)
+
+## Settings
+
+![Settings tab](resources/image4.png)
+
+Everything is configurable from the panel's **Settings** tab — no `settings.json` editing needed, though every control maps to a `claude-usage-monitor.*` setting if you prefer that.
+
+- **Status bar** — display presets (5-hour, 7-day, both, worst window, per model, extra usage), the raw format template, and a live preview of the result. See [Customising the text](#customising-the-text).
+- **Status bar indicator** — background, tinted text, emoji or none, with colour pickers for the theme's warning/error tokens. See [Choosing the indicator](#choosing-the-indicator).
+- **Blocked by** — a checkbox per window that may take over the status bar when it hits 100%. See [When a window runs out](#when-a-window-runs-out).
+- **Thresholds** — the warning and error percentages (default 60 / 80).
+- **Panel** — burn-rate tracking, clock format, reset display (countdown, clock time or both), usage shown as used or remaining, and the refresh interval.
 
 ## Commands
 
