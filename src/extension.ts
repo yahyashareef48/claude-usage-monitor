@@ -3,7 +3,8 @@ import { fetchUsageData, newest, readClaudeCodeSnapshot, setUserAgent, UsageHttp
 import { StatusBarManager } from './statusBar';
 import { UsagePanel } from './sessionPopover';
 import { maybeNotify } from './notifications';
-import { recordHistory } from './history';
+import { recordHistory, resetHistoryCache } from './history';
+import { accountScopedKey, affectsAccount } from './claudeConfig';
 import { UsageData } from './types';
 
 const CONFIG_SECTION           = 'claude-usage-monitor';
@@ -33,7 +34,10 @@ function cacheTtlMs(): number {
 // Versioned key: pre-1.3.0 builds wrote a UsageData without `limits` to the
 // unversioned key. Sharing a key across versions let an older co-installed
 // build feed limits-free data to a newer one, blanking the per-model bars.
-const CACHE_KEY = 'claudeUsage.cache.v2';
+//
+// Account-scoped, and read through a function rather than a const, because the
+// configured account can change while the window is open — see claudeConfig.
+const cacheKey = () => accountScopedKey('claudeUsage.cache.v2');
 
 interface CacheEntry {
 	data:      UsageData | null;
@@ -126,7 +130,7 @@ export function activate(context: vscode.ExtensionContext) {
 	}
 
 	async function refresh() {
-		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 		// Claude Code saves its own reading of the same endpoint. Whichever of
 		// the two is newer is shown, and a fresh one spares us the request.
 		const snap = await readClaudeCodeSnapshot();
@@ -148,7 +152,7 @@ export function activate(context: vscode.ExtensionContext) {
 			errorCount = 0;
 			// Shared like our own fetches, so other windows skip theirs too.
 			const entry: CacheEntry = { data: snap, error: null, fetchedAt: snap.fetchedAt.getTime() };
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(snap, null);
 			return;
 		}
@@ -165,7 +169,7 @@ export function activate(context: vscode.ExtensionContext) {
 			errorCount = 0;
 			blockedUntil = 0;
 			const entry: CacheEntry = { data, error: null, fetchedAt: Date.now() };
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(data, null);
 		} catch (err) {
 			errorCount++;
@@ -178,7 +182,7 @@ export function activate(context: vscode.ExtensionContext) {
 			const last = newest(currentData, cached?.data, snap);
 			const entry: CacheEntry = { data: last, error, fetchedAt: Date.now() };
 			if (blockedUntil > 0) { entry.blockedUntil = blockedUntil; }
-			await context.globalState.update(CACHE_KEY, entry);
+			await context.globalState.update(cacheKey(), entry);
 			applyState(last, error);
 			console.error('[Claude Usage Monitor]', error);
 		}
@@ -186,7 +190,7 @@ export function activate(context: vscode.ExtensionContext) {
 
 	// On startup: show whatever the shared cache holds immediately, then
 	// Claude Code's saved reading if that turns out to be newer.
-	const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+	const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 	if (cached) {
 		applyState(cached.data, cached.error);
 	} else {
@@ -227,12 +231,23 @@ export function activate(context: vscode.ExtensionContext) {
 		}
 	});
 
+	// Pointing the window at a different account invalidates everything derived
+	// from the old one, so drop it and refetch rather than waiting for the poll.
+	const onAccountChange = vscode.workspace.onDidChangeConfiguration((e) => {
+		if (!affectsAccount(e)) { return; }
+		resetHistoryCache();
+		currentData = null;
+		if (timer) { clearTimeout(timer); timer = null; }
+		statusBar.showInitializing();
+		refresh().then(() => scheduleNext());
+	});
+
 	const showPopup = vscode.commands.registerCommand('claude-usage-monitor.showPopup', () => {
 		panel.show(currentData, currentError);
 	});
 
 	// Apply a changed interval without a reload: restart the timer from now.
-	const onConfig = vscode.workspace.onDidChangeConfiguration((event) => {
+	const onIntervalChange = vscode.workspace.onDidChangeConfiguration((event) => {
 		if (!event.affectsConfiguration(`${CONFIG_SECTION}.refreshInterval`)) { return; }
 		if (timer) { clearTimeout(timer); timer = null; }
 		scheduleNext();
@@ -242,9 +257,9 @@ export function activate(context: vscode.ExtensionContext) {
 		if (timer) { clearTimeout(timer); timer = null; }
 		// Force a real fetch by clearing the cache, unless the API told us to
 		// wait: a manual retry during a block costs quota and extends nothing.
-		const cached = reviveCache(context.globalState.get<CacheEntry>(CACHE_KEY));
+		const cached = reviveCache(context.globalState.get<CacheEntry>(cacheKey()));
 		const stillBlocked = !!cached?.blockedUntil && cached.blockedUntil > Date.now();
-		if (!stillBlocked) { await context.globalState.update(CACHE_KEY, undefined); }
+		if (!stillBlocked) { await context.globalState.update(cacheKey(), undefined); }
 		await refresh();
 		scheduleNext();
 	});
@@ -254,7 +269,8 @@ export function activate(context: vscode.ExtensionContext) {
 		statusBar,
 		panel,
 		onFocus,
-		onConfig,
+		onAccountChange,
+		onIntervalChange,
 		showPopup,
 		refreshCmd,
 	);

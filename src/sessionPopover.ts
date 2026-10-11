@@ -1,5 +1,6 @@
 import * as vscode from "vscode";
 import { UsageData, QuotaBucket, UsageLimit } from "./types";
+import { getAccount } from "./claudeConfig";
 import { retryAtFromMessage } from "./usageClient";
 import {
   Burn,
@@ -358,7 +359,13 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
   const source = `<span style="opacity:0.6">${data?.source === "claude-code"
     ? "via Claude Code's saved reading (no request)"
     : "api.anthropic.com/api/oauth/usage"}</span>`;
-  const subtitle = data ? `Updated ${timeAgo(data.fetchedAt)} · ${source}` : source;
+  // Name the account: two panels on two accounts are otherwise identical.
+  const account = getAccount()?.email;
+  const subtitle = [
+    account ? escapeHtml(account) : null,
+    data ? `Updated ${timeAgo(data.fetchedAt)}` : null,
+    source,
+  ].filter(Boolean).join(" · ");
 
   const eu = data?.extraUsage ?? null;
   const extraSection = eu?.isEnabled
@@ -498,7 +505,7 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
 			<input type="text" class="format-input" id="sb-format" spellcheck="false" value="${escapeHtml(format)}"
 				oninput="previewFormat(this.value)"
 				onchange="updateSetting('claude-usage-monitor.statusBarFormat', this.value)">
-			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .used .left .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code> and <code>{dot}</code></div>
+			<div class="hint">Windows ${escapeHtml(windowKeys)} · fields <code>.pct .used .left .reset .resetTime .resetAt .name .bar</code> · plus <code>{icon}</code>, <code>{dot}</code> and <code>{account}</code></div>
 		</div>
 		<div class="setting-stack" id="blocked-by">
 			<span class="setting-label">Show "blocked" at 100% <span class="info-icon" title="When a checked window is exhausted, the status bar replaces your format with 'blocked · countdown'. Unchecked windows keep your format and still show as exhausted in the tooltip and panel.">ⓘ</span></span>

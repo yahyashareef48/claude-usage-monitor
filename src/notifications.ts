@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { UsageData } from './types';
+import { accountScopedKey } from './claudeConfig';
 import { QuotaWindow, allWindows, formatTimeRemaining, resetMs, sameCycle } from './windows';
 
 /**
@@ -9,7 +10,8 @@ import { QuotaWindow, allWindows, formatTimeRemaining, resetMs, sameCycle } from
  * poll gets uninstalled.
  */
 
-const STATE_KEY = 'claudeUsage.notified.v2';
+/** Account-scoped: one account going quiet must not mute the other. */
+const stateKey = () => accountScopedKey('claudeUsage.notified.v2');
 
 /** Highest level already announced for a window, and the cycle it applies to. */
 interface Announced { at: number | null; level: number; }
@@ -49,7 +51,7 @@ export async function maybeNotify(memento: vscode.Memento, data: UsageData): Pro
 	const errT     = cfg.get<number>('errorThreshold', 80);
 	const minLevel = mode === 'all' ? Level.warning : Level.error;
 
-	const seen = memento.get<Record<string, Announced>>(STATE_KEY) ?? {};
+	const seen = memento.get<Record<string, Announced>>(stateKey()) ?? {};
 	const due: Array<[QuotaWindow, Level]> = [];
 
 	// Rebuilt from the live windows each poll, so entries for windows the API
@@ -75,6 +77,6 @@ export async function maybeNotify(memento: vscode.Memento, data: UsageData): Pro
 
 	// Record before showing: globalState is shared across windows, so writing
 	// first keeps a second window from repeating the same notification.
-	await memento.update(STATE_KEY, next);
+	await memento.update(stateKey(), next);
 	for (const [w, level] of due) { show(w, level); }
 }

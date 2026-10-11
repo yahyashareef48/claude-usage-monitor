@@ -2,8 +2,9 @@ import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
 import * as https from 'https';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { QuotaBucket, UsageData, UsageLimit } from './types';
+import { getClaudeConfigDir, getKeychainServices, isConfigDirExplicit } from './claudeConfig';
 
 const USAGE_URL = 'https://api.anthropic.com/api/oauth/usage';
 const CLIENT_NAME = 'claude-usage-monitor';
@@ -78,32 +79,33 @@ function parseRetryAfter(raw: string | string[] | undefined): number | null {
 	return Math.min(ms, MAX_RETRY_AFTER_S * 1000);
 }
 
-/**
- * Mirrors the Claude Code extension's own config dir resolution:
- * CLAUDE_CONFIG_DIR env var, otherwise ~/.claude
- */
-function getClaudeConfigDir(): string {
-	const envDir = process.env.CLAUDE_CONFIG_DIR;
-	if (envDir) {
-		return envDir;
+/** execFile, not exec: the service name is derived from user input and must not reach a shell. */
+function keychainRead(service: string): string | null {
+	try {
+		return execFileSync('security', ['find-generic-password', '-s', service, '-w'], {
+			timeout: 3000,
+			stdio: ['ignore', 'pipe', 'ignore'],
+		}).toString().trim();
+	} catch {
+		return null;
 	}
-	return path.join(os.homedir(), '.claude');
 }
 
 function readTokenFromKeychain(): string | null {
 	if (process.platform !== 'darwin') { return null; }
-	try {
-		const json = execSync(
-			"security find-generic-password -s 'Claude Code-credentials' -w",
-			{ timeout: 3000, stdio: ['ignore', 'pipe', 'ignore'] },
-		).toString().trim();
-		const parsed = JSON.parse(json);
-		// Keychain output: { accessToken, refreshToken, expiresAt }
-		// Fallback: older format { claudeAiOauth: { accessToken } }
-		return parsed?.accessToken ?? parsed?.claudeAiOauth?.accessToken ?? null;
-	} catch {
-		return null;
+
+	for (const service of getKeychainServices()) {
+		const json = keychainRead(service);
+		if (!json) { continue; }
+		try {
+			const parsed = JSON.parse(json);
+			// Keychain output: { accessToken, refreshToken, expiresAt }
+			// Fallback: older format { claudeAiOauth: { accessToken } }
+			const token = parsed?.accessToken ?? parsed?.claudeAiOauth?.accessToken ?? null;
+			if (token) { return token; }
+		} catch { /* unparseable item — try the next service */ }
 	}
+	return null;
 }
 
 function readAccessToken(): string | null {
@@ -191,8 +193,10 @@ export async function fetchUsageData(): Promise<UsageData> {
 	const token = readAccessToken();
 	if (!token) {
 		const credPath = path.join(getClaudeConfigDir(), '.credentials.json');
-		const macNote = process.platform === 'darwin' ? ' and macOS Keychain (Claude Code-credentials)' : '';
-		throw new Error(`No OAuth token found. Looked in: ${credPath}${macNote}. Make sure you are logged in to Claude Code.`);
+		const macNote = process.platform === 'darwin'
+			? ` and macOS Keychain (${getKeychainServices().join(', ')})`
+			: '';
+		throw new Error(`No OAuth token found. Looked in: ${credPath}${macNote}. Make sure you are logged in to Claude Code. If you run more than one account, point "claude-usage-monitor.configDir" at the right config directory.`);
 	}
 
 	let body: string;
@@ -238,12 +242,17 @@ export async function fetchUsageData(): Promise<UsageData> {
 /**
  * Claude Code's global config file, resolved the way Claude Code itself does
  * on every platform: a legacy `<config dir>/.config.json` wins if it exists,
- * otherwise `.claude.json` in CLAUDE_CONFIG_DIR, or in the home directory.
+ * otherwise `.claude.json` in an explicit config dir (the `configDir` setting
+ * or CLAUDE_CONFIG_DIR), or in the home directory. Following the setting here
+ * matters: the home-directory file belongs to the default account, and its
+ * account check passes against itself, so a second-account window would
+ * otherwise show the first account's numbers.
  */
 function claudeCodeConfigPath(): string {
-	const legacy = path.join(getClaudeConfigDir(), '.config.json');
+	const dir = getClaudeConfigDir();
+	const legacy = path.join(dir, '.config.json');
 	if (fs.existsSync(legacy)) { return legacy; }
-	return path.join(process.env.CLAUDE_CONFIG_DIR || os.homedir(), '.claude.json');
+	return path.join(isConfigDirExplicit() ? dir : os.homedir(), '.claude.json');
 }
 
 /**
