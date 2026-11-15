@@ -281,6 +281,7 @@ function readPanelConfig() {
     errT:     cfg.get<number>('errorThreshold', 80),
     clockFmt: cfg.get<string>('clockFormat', 'auto'),
     resetDisp: cfg.get<string>('resetDisplay', 'countdown'),
+    longCountdown: cfg.get<boolean>('showLongResetCountdown', false),
     usageDisp: cfg.get<string>('usageDisplay', 'used'),
     refreshS: cfg.get<number>('refreshInterval', 120),
   };
@@ -304,7 +305,7 @@ interface PanelState {
  * user is mid-edit all survive a poll.
  */
 export function buildFragments(data: UsageData | null, error: string | null, store: HistoryStore): PanelState {
-  const { warnT, errT, clockFmt, resetDisp, usageDisp, refreshS } = readPanelConfig();
+  const { warnT, errT, clockFmt, resetDisp, longCountdown, usageDisp, refreshS } = readPanelConfig();
 
   // Burn rate per window, addressed by the same keys allWindows() uses.
   const burnByKey = new Map<string, string>();
@@ -570,6 +571,10 @@ export function buildFragments(data: UsageData | null, error: string | null, sto
 				<option value="clock"${sel(resetDisp, 'clock')}>Clock time (13:27)</option>
 				<option value="both"${sel(resetDisp, 'both')}>Both (3h 37m (13:27))</option>
 			</select>
+		</div>
+		<div class="setting-row">
+			<span class="setting-label">Long countdowns <span class="info-icon" title="When a reset is more than a day away, keep counting down (2d 3h 5m) instead of showing its weekday and time (Mon 7:44 PM).">ⓘ</span></span>
+			<label class="check"><input type="checkbox"${longCountdown ? " checked" : ""} onchange="updateSetting('claude-usage-monitor.showLongResetCountdown', this.checked)"> Count down past a day</label>
 		</div>
 		<div class="setting-row">
 			<span class="setting-label">Show usage as <span class="info-icon" title="Show each window as the share used or the share left, everywhere {…pct} and the bars appear. Thresholds and colours always work on used.">ⓘ</span></span>

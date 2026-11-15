@@ -56,7 +56,7 @@ The status bar is driven by a format template, `claude-usage-monitor.statusBarFo
 
 Fields are `.pct`, `.used`, `.left`, `.reset`, `.resetTime` (clock time, e.g. `13:27`), `.resetAt`, `.name` and `.bar`, plus `.spent` and `.limit` on the pay-as-you-go window. `{icon}` inserts the Claude mark, `{dot}` the threshold glyph, and `{{`/`}}` escape literal braces.
 
-Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown.
+Set `claude-usage-monitor.resetDisplay` to `clock` or `both` to show `.reset` as the local reset time (`13:27`) instead of a countdown. A countdown more than a day out shows the reset's weekday and time (`Mon 7:44 PM`); set `claude-usage-monitor.showLongResetCountdown` to `true` to keep counting down (`2d 3h 5m`) instead.
 
 Set `claude-usage-monitor.usageDisplay` to `remaining` to show how much is left instead of how much is used, so the default reads `88% · 3h 40m` (left, and time left). It flips `.pct`, `.bar`, the tooltip and the panel bars; `.used` and `.left` always mean what they say, and thresholds and colours keep working on used.
 
