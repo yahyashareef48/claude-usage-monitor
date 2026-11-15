@@ -38,6 +38,14 @@ export function sortLimits(limits: UsageLimit[]): UsageLimit[] {
 	return [...limits].sort((a, b) => rank(a) - rank(b));
 }
 
+/**
+ * The `showLongResetCountdown` setting: past a day, keep counting down
+ * (`2d 3h 5m`) instead of switching to the reset's weekday and time.
+ */
+function showLongResetCountdown(): boolean {
+	return vscode.workspace.getConfiguration('claude-usage-monitor').get<boolean>('showLongResetCountdown', false);
+}
+
 export function formatTimeRemaining(resetsAt: string): string {
 	const ms = new Date(resetsAt).getTime() - Date.now();
 	if (ms <= 0) { return 'resetting'; }
@@ -45,7 +53,9 @@ export function formatTimeRemaining(resetsAt: string): string {
 	const h = Math.floor(totalMin / 60);
 	const m = totalMin % 60;
 	if (h >= 24) {
-		return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+		return showLongResetCountdown()
+			? `${Math.floor(h / 24)}d ${h % 24}h ${m}m`
+			: new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
 	}
 	return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
@@ -95,8 +105,10 @@ export function formatReset(iso: string): string {
 	const mode = vscode.workspace.getConfiguration('claude-usage-monitor').get<string>('resetDisplay', 'countdown');
 	if (mode === 'countdown') { return formatTimeRemaining(iso); }
 	const ms = new Date(iso).getTime() - Date.now();
-	// Past a day the countdown already reads as a weekday and time.
-	if (mode === 'clock' || ms <= 0 || ms >= 86_400_000) { return ms <= 0 ? 'resetting' : formatResetClock(iso); }
+	// Past a day the countdown already reads as a weekday and time, unless
+	// `showLongResetCountdown` keeps it counting in days.
+	const countdownIsClock = ms >= 86_400_000 && !showLongResetCountdown();
+	if (mode === 'clock' || ms <= 0 || countdownIsClock) { return ms <= 0 ? 'resetting' : formatResetClock(iso); }
 	return `${formatTimeRemaining(iso)} (${formatResetClock(iso)})`;
 }
 

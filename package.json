@@ -68,6 +68,11 @@
           "default": "countdown",
           "markdownDescription": "How reset times show in the status bar and `{….reset}` tokens."
         },
+        "claude-usage-monitor.showLongResetCountdown": {
+          "type": "boolean",
+          "default": false,
+          "markdownDescription": "Keep counting down when a reset is more than a day away (e.g. `2d 3h 5m`) instead of showing its weekday and time (e.g. `Mon 7:44 PM`). Applies to the status bar, the usage panel and notifications."
+        },
         "claude-usage-monitor.usageDisplay": {
           "type": "string",
           "enum": [
