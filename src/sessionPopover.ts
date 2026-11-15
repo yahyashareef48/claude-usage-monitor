@@ -15,6 +15,7 @@ import {
   allWindows,
   colorPct,
   displayPct,
+  formatTimeRemaining,
   Level,
   levelOf,
   limitLabel,
@@ -36,18 +37,6 @@ function timeAgo(date: Date): string {
   if (sec < 3600) { const m = Math.floor(sec / 60); return `${m} minute${m === 1 ? "" : "s"} ago`; }
   const h = Math.floor(sec / 3600);
   return `${h} hour${h === 1 ? "" : "s"} ago`;
-}
-
-function formatTimeRemaining(resetsAt: string): string {
-  const ms = new Date(resetsAt).getTime() - Date.now();
-  if (ms <= 0) { return "resetting now"; }
-  const totalMin = Math.floor(ms / 60_000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h >= 24) {
-    return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
-  }
-  return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
 
 function formatError(raw: string): { message: string; hint: string | null } {
