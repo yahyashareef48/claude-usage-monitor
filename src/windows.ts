@@ -38,6 +38,11 @@ export function sortLimits(limits: UsageLimit[]): UsageLimit[] {
 	return [...limits].sort((a, b) => rank(a) - rank(b));
 }
 
+function showLongResetCountdown(): boolean {
+	return vscode.workspace.getConfiguration('claude-usage-monitor')
+		.get<boolean>('showLongResetCountdown', false);
+}
+
 export function formatTimeRemaining(resetsAt: string): string {
 	const ms = new Date(resetsAt).getTime() - Date.now();
 	if (ms <= 0) { return 'resetting'; }
@@ -45,7 +50,12 @@ export function formatTimeRemaining(resetsAt: string): string {
 	const h = Math.floor(totalMin / 60);
 	const m = totalMin % 60;
 	if (h >= 24) {
-		return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+		if (!showLongResetCountdown()) {
+			return new Date(resetsAt).toLocaleString(undefined, { weekday: 'short', hour: 'numeric', minute: '2-digit' });
+		}
+		const days = Math.floor(totalMin / (24 * 60));
+		const hours = Math.floor((totalMin % (24 * 60)) / 60);
+		return `${days}d ${hours}h ${m}m`;
 	}
 	return h > 0 ? `${h}h ${m}m` : `${m}m`;
 }
